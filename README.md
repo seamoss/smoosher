@@ -325,6 +325,8 @@ This project is free and open source. Feel free to use, modify, and distribute.
 
 ## Credits
 
+Built as a need by Seánan McCullough, Helvete Sound, LLC, Portland, OR - https://helvetesound.com
+
 Built with JUCE Framework by Roli Ltd.
 
 ## Support
