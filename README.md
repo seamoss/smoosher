@@ -2,6 +2,8 @@
 
 A free audio compressor plugin with character. Smoosher combines aggressive compression, tube-style saturation, and intelligent sibilance detection into a simple, intuitive interface.
 
+<img width="500" height="259" alt="Screenshot 2025-10-17 at 16 18 59" src="https://github.com/user-attachments/assets/b107ea45-8ebb-4a42-b06b-9a3aa54103de" />
+
 ## Features
 
 ### Core Processing
