@@ -1,0 +1,115 @@
+name: Build Smoosher
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+
+          - name: Windows
+            os: windows-latest
+
+          - name: Linux
+            os: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libcurl4-openssl-dev \
+            libfreetype6-dev \
+            libx11-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libwebkit2gtk-4.0-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package macOS (AU + VST3)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p Smoosher_Distribution/AU
+          mkdir -p Smoosher_Distribution/VST3
+          cp -r build/Smoosher_artefacts/AU/Smoosher.component Smoosher_Distribution/AU/
+          cp -r build/Smoosher_artefacts/VST3/Smoosher.vst3 Smoosher_Distribution/VST3/
+          cd Smoosher_Distribution
+          zip -r ../Smoosher-macOS.zip .
+          cd ..
+
+      - name: Package Windows (VST3)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p Smoosher_Distribution/VST3
+          cp -r build/Smoosher_artefacts/Release/VST3/Smoosher.vst3 Smoosher_Distribution/VST3/
+          cd Smoosher_Distribution
+          7z a ../Smoosher-Windows.zip .
+          cd ..
+
+      - name: Package Linux (VST3)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p Smoosher_Distribution/VST3
+          cp -r build/Smoosher_artefacts/VST3/Smoosher.vst3 Smoosher_Distribution/VST3/
+          cd Smoosher_Distribution
+          zip -r ../Smoosher-Linux.zip .
+          cd ..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Smoosher-${{ runner.os }}
+          path: Smoosher-*.zip
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Smoosher-macOS/*.zip
+            Smoosher-Windows/*.zip
+            Smoosher-Linux/*.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
