@@ -4,7 +4,13 @@ Version 1.2.0 adds A/B, Undo/Redo, and Ego Check inside More Trouble. Keep JUCE 
 
 See the [1.2.0 release notes](releases/1.2.0.md) for current release status and verification.
 
-## Published 1.1.0 tester release
+## Published 1.2.0 tester release
+
+[Smoosher 1.2.0 — More Trouble](https://github.com/seamoss/smoosher/releases/tag/v1.2.0) was published as a tester prerelease from commit `cd2859a6a770f327078220fb8714d9bb8c59c3aa`. [Main CI](https://github.com/seamoss/smoosher/actions/runs/43116683138) and [release CI](https://github.com/seamoss/smoosher/actions/runs/43117552899) passed Mac/Windows builds, processor tests, release-script tests, and AU validation. The tag run signed and notarized the universal installer, stapled its ticket, and created the release assets.
+
+The exact downloaded assets passed their checksums. The Mac installer passed signature, stapled-ticket, Gatekeeper, embedded bundle-signature, architecture/version, and install-path checks; Apple reported Accepted with no issues. Its signed VST3 passed pluginval strictness 5 with GUI tests skipped. The Windows ZIP passed CRC, x64 PE, 1.2.0 manifest, and bundled README/guide/screenshot checks. Wider DAW playback, clean-machine installation, and minimum-OS testing remain tester work. See the [release notes](releases/1.2.0.md).
+
+## Previous 1.1.0 tester release
 
 [Smoosher 1.1.0](https://github.com/seamoss/smoosher/releases/tag/v1.1.0) was built from commit `0ce8b2b092bd48321cb06d472e1656463cb92309` by [release CI run 43106218266](https://github.com/seamoss/smoosher/actions/runs/43106218266). Both platform builds and regression checks passed. CI validated the AU, signed the universal Mac payload and installer, obtained Apple notarization acceptance with no issues, stapled the ticket, and created the draft release.
 
