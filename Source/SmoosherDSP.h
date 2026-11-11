@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include <array>
+#include "EgoCheck.h"
 
 // The 1.0 processing curves, with a 20 ms ramp between control settings.
 // Smoothers advance once per sample, shared by both channels.
@@ -23,8 +24,9 @@ public:
         }
     }
 
-    MeterReadings process (juce::AudioBuffer<float>& buffer, Controls controls)
+    MeterReadings process (juce::AudioBuffer<float>& buffer, Controls controls, EgoCheck* ego = nullptr)
     {
+        if (ego != nullptr) ego->beginBlock();
         const auto values = targets (controls);
         for (size_t i = 0; i < smooth.size(); ++i)
             smooth[i].setTargetValue (values[i]);
@@ -34,6 +36,9 @@ public:
         auto* const* data = buffer.getArrayOfWritePointers();
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
+            const auto matchGain = ego != nullptr ? ego->nextGain() : 1.0f;
+            const auto dryBlend = ego != nullptr ? ego->nextDryBlend() : 0.0f;
+            double inputPower = 0, outputPower = 0;
             std::array<float, count> v;
             for (size_t i = 0; i < smooth.size(); ++i)
                 v[i] = smooth[i].getNextValue();
@@ -80,12 +85,17 @@ public:
                         processed = input + (processed - input) * v[active];
                 }
 
-                const auto output = dry * (1.0f - v[blend]) + processed * v[outputGain] * v[blend];
+                auto output = dry * (1.0f - v[blend]) + processed * v[outputGain] * v[blend];
+                inputPower += static_cast<double> (dry) * dry;
+                outputPower += static_cast<double> (output) * output;
+                if (matchGain != 1.0f) output *= matchGain;
+                if (dryBlend != 0.0f) output += (dry - output) * dryBlend;
                 data[channel][sample] = output;
                 auto& peak = channel == 0 ? meters.left : meters.right;
                 peak = juce::jmax (peak, std::abs (output));
                 meters.clipped = meters.clipped || std::abs (output) >= 1.0f;
             }
+            if (ego != nullptr && channels > 0) ego->measure (inputPower / channels, outputPower / channels);
         }
         if (channels == 1)
             meters.right = meters.left;

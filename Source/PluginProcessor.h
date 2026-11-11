@@ -4,7 +4,9 @@
 #include "SmoosherDSP.h"
 
 //==============================================================================
-class SmoosherAudioProcessor  : public juce::AudioProcessor
+class SmoosherAudioProcessor  : public juce::AudioProcessor,
+                                private juce::AudioProcessorValueTreeState::Listener,
+                                private juce::Timer
 {
 public:
     //==============================================================================
@@ -63,12 +65,37 @@ public:
     SmoosherDSP::MeterReadings consumeMeters();
     void clearClip() { outputClipped.store (false); }
 
+    // UI edits are grouped explicitly; host automation never enters local Undo.
+    void beginUserEdit (const juce::String& name);
+    void endUserEdit();
+    void synchroniseHistory();
+    bool canUndo();
+    bool canRedo();
+    juce::String undoName();
+    juce::String redoName();
+    void undo();
+    void redo();
+    int activeSlot() const;
+    void selectSlot (int slot);
+    void copyToOtherSlot();
+    EgoCheck::Settings egoSettings() const { return ego.settings(); }
+    EgoCheck::Status egoStatus() const { return ego.status(); }
+    float egoProgress() const { return ego.progress(); }
+    void learnEgo();
+    void cancelEgo();
+    void enableEgo (bool enabled);
+    void resetEgo();
+    void auditionDry (bool dry) { ego.auditionDry (dry); }
+    bool moreTroubleOpen() const { return drawerOpen.load(); }
+    void setMoreTroubleOpen (bool open) { drawerOpen.store (open); if (! open) auditionDry (false); }
+
 private:
     //==============================================================================
     juce::AudioProcessorValueTreeState apvts;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     SmoosherDSP dsp;
+    EgoCheck ego;
     SmoosherDSP::Controls controls() const;
     std::atomic<float>* smooshParameter = nullptr;
     std::atomic<float>* inputParameter = nullptr;
@@ -80,6 +107,37 @@ private:
     Preset currentPreset { "Init", 0, 0, 0 };
     Preset inferPreset() const;
     static bool validPreset (const Preset&);
+
+    struct Snapshot
+    {
+        SmoosherDSP::Controls controls { 0, 0, 0, 100 };
+        Preset preset { "Init", 0, 0, 0 };
+        EgoCheck::Settings ego;
+    };
+    struct Workspace
+    {
+        std::array<Snapshot, 2> slots;
+        std::array<bool, 2> valid {{ true, false }};
+        int active = 0;
+    };
+    struct Edit { Workspace before, after; juce::String name; };
+    Workspace workspace, editBefore, learnBefore;
+    std::vector<Edit> undoStack, redoStack;
+    juce::String editName;
+    int editDepth = 0;
+    uint64_t knownConfiguration = 0, pendingLearn = 0;
+    std::atomic<juce::Thread::ThreadID> localEditThread { nullptr };
+    std::atomic<uint64_t> externalEdits { 0 };
+    uint64_t editExternalRevision = 0;
+    std::atomic<bool> drawerOpen { false };
+    void parameterChanged (const juce::String&, float) override;
+    void timerCallback() override { synchroniseHistory(); }
+    Workspace captureWorkspace() const;
+    void applyWorkspace (const Workspace&);
+    void recordEdit (const Workspace&, const Workspace&, const juce::String&);
+    static bool equal (const Workspace&, const Workspace&);
+    void writeMoreTrouble (juce::ValueTree&);
+    void readMoreTrouble (const juce::ValueTree&);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmoosherAudioProcessor)
 };

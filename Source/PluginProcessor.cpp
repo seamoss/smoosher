@@ -19,10 +19,16 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
     inputParameter = apvts.getRawParameterValue ("inputGain");
     outputParameter = apvts.getRawParameterValue ("outputGain");
     mixParameter = apvts.getRawParameterValue ("mix");
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix" })
+        apvts.addParameterListener (id, this);
+    startTimerHz (10);
 }
 
 SmoosherAudioProcessor::~SmoosherAudioProcessor()
 {
+    stopTimer();
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix" })
+        apvts.removeParameterListener (id, this);
 }
 
 //==============================================================================
@@ -143,6 +149,7 @@ void SmoosherAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
 {
     juce::ignoreUnused (samplesPerBlock);
     dsp.prepare (sampleRate, controls());
+    ego.prepare (sampleRate);
     meterLeft.store (0); meterRight.store (0); meterReduction.store (0);
     outputClipped.store (false);
 }
@@ -183,7 +190,7 @@ void SmoosherAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     juce::ignoreUnused (midiMessages);
     for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
         buffer.clear (channel, 0, buffer.getNumSamples());
-    const auto meters = dsp.process (buffer, controls());
+    const auto meters = dsp.process (buffer, controls(), &ego);
     auto accumulate = [] (std::atomic<float>& destination, float value)
     {
         auto previous = destination.load (std::memory_order_relaxed);
@@ -215,12 +222,14 @@ juce::AudioProcessorEditor* SmoosherAudioProcessor::createEditor()
 //==============================================================================
 void SmoosherAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    synchroniseHistory();
     auto state = apvts.copyState();
     const auto preset = getCurrentPreset();
     state.setProperty ("presetName", preset.name, nullptr);
     state.setProperty ("presetSmoosh", preset.smoosh, nullptr);
     state.setProperty ("presetInput", preset.inputDB, nullptr);
     state.setProperty ("presetOutput", preset.outputDB, nullptr);
+    writeMoreTrouble (state);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -242,6 +251,7 @@ void SmoosherAudioProcessor::setStateInformation (const void* data, int sizeInBy
         preset = inferPreset();
     const juce::ScopedLock lock (presetLock);
     currentPreset = preset;
+    readMoreTrouble (state);
 }
 
 //==============================================================================
@@ -277,6 +287,7 @@ void SmoosherAudioProcessor::loadPreset (const Preset& preset)
 {
     if (! validPreset (preset))
         return;
+    beginUserEdit ("Load preset");
     auto setParameter = [this] (const char* id, float value)
     {
         auto* parameter = apvts.getParameter (id);
@@ -289,6 +300,7 @@ void SmoosherAudioProcessor::loadPreset (const Preset& preset)
     setParameter ("outputGain", preset.outputDB);
     const juce::ScopedLock lock (presetLock);
     currentPreset = preset;
+    endUserEdit();
 }
 
 SmoosherAudioProcessor::Preset SmoosherAudioProcessor::getCurrentPreset() const
@@ -346,8 +358,10 @@ juce::Result SmoosherAudioProcessor::saveUserPreset (const juce::File& file, con
     juce::TemporaryFile temporary (file);
     if (! xml.writeTo (temporary.getFile()) || ! temporary.overwriteTargetFileWithTemporary())
         return juce::Result::fail ("The preset could not be saved to this folder.");
+    beginUserEdit ("Save preset name");
     const juce::ScopedLock lock (presetLock);
     currentPreset = preset;
+    endUserEdit();
     return juce::Result::ok();
 }
 

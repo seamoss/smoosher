@@ -29,6 +29,10 @@ private:
     juce::Label smooshLabel, inputGainLabel, outputGainLabel, mixLabel, modifiedLabel;
     juce::ComboBox presetComboBox;
     juce::TextButton saveButton { "Save..." }, clipButton { "PEAK" };
+    juce::TextButton moreButton { "More Trouble +" }, aButton { "A" }, bButton { "B" }, copyButton { "Copy A > B" };
+    juce::TextButton undoButton { "Undo" }, redoButton { "Redo" }, learnButton { "Learn" };
+    juce::TextButton matchButton { "Match off" }, dryButton { "Hold for Dry" }, resetEgoButton { "Reset" };
+    juce::Label egoStatusLabel, egoGainLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> smooshAttachment, inputGainAttachment, outputGainAttachment, mixAttachment;
     juce::Array<juce::File> userPresets;
     juce::TooltipWindow tooltips { this, 600 };
@@ -36,6 +40,8 @@ private:
     float heldPeak = -100.0f;
     double peakHoldUntil = 0, lastMeterTime = 0;
     bool clipVisible = false;
+    bool drawerVisible = false;
+    int activeGestures = 0;
 
     void timerCallback() override;
     void refreshPresetList();
@@ -43,5 +49,6 @@ private:
     void savePreset();
     void configureKnob (juce::Slider&, juce::Label&, const juce::String&, const juce::String&);
     void drawMeters (juce::Graphics&);
+    void updateMoreTrouble();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmoosherAudioProcessorEditor)
 };

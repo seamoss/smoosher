@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Smoosher VERSION 1.1.0)
+project(Smoosher VERSION 1.2.0)
 
 option(SMOOSHER_COPY_PLUGIN_AFTER_BUILD "Install plugins after building" OFF)
 
@@ -41,6 +41,7 @@ juce_add_plugin(Smoosher
 target_sources(Smoosher
     PRIVATE
         Source/PluginProcessor.cpp
+        Source/MoreTrouble.cpp
         Source/PluginEditor.cpp
 )
 

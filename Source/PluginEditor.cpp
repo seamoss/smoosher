@@ -27,6 +27,8 @@ SmoosherLookAndFeel::SmoosherLookAndFeel()
     setColour (juce::PopupMenu::highlightedTextColourId, text);
     setColour (juce::TextButton::buttonColourId, juce::Colour (0xff303b37));
     setColour (juce::TextButton::textColourOffId, text);
+    setColour (juce::TextButton::buttonOnColourId, green);
+    setColour (juce::TextButton::textColourOnId, background);
     setColour (juce::Label::textColourId, text);
     setColour (juce::AlertWindow::backgroundColourId, panel);
     setColour (juce::AlertWindow::textColourId, text);
@@ -138,6 +140,18 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     inputGainAttachment = std::make_unique<Attachment> (state, "inputGain", inputGainSlider);
     outputGainAttachment = std::make_unique<Attachment> (state, "outputGain", outputGainSlider);
     mixAttachment = std::make_unique<Attachment> (state, "mix", mixSlider);
+    for (auto* slider : { &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider })
+    {
+        slider->onDragStart = [this, slider]
+        {
+            ++activeGestures;
+            audioProcessor.beginUserEdit (slider->getName());
+        };
+        slider->onDragEnd = [this]
+        {
+            if (activeGestures > 0) { --activeGestures; audioProcessor.endUserEdit(); }
+        };
+    }
 
     presetComboBox.setName ("Preset");
     presetComboBox.setTooltip ("Factory and user presets. An asterisk means the preset has been modified.");
@@ -171,8 +185,47 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
         timerCallback();
     };
     addAndMakeVisible (clipButton);
+    addAndMakeVisible (moreButton);
+    moreButton.setTooltip ("A/B, Undo, and Ego Check. Bad decisions insurance, included free.");
+    moreButton.onClick = [this]
+    {
+        audioProcessor.setMoreTroubleOpen (! audioProcessor.moreTroubleOpen());
+        updateMoreTrouble();
+    };
+    for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton,
+                          &learnButton, &matchButton, &dryButton, &resetEgoButton })
+        addChildComponent (button);
+    aButton.setTooltip ("Recall A: all four controls, preset identity, and Ego Check.");
+    bButton.setTooltip ("Recall B. On first use, B starts as a copy of A.");
+    copyButton.setTooltip ("Replace the other slot with this one. Undo can reverse the copy.");
+    aButton.onClick = [this] { audioProcessor.selectSlot (0); updateMoreTrouble(); };
+    bButton.onClick = [this] { audioProcessor.selectSlot (1); updateMoreTrouble(); };
+    copyButton.onClick = [this] { audioProcessor.copyToOtherSlot(); updateMoreTrouble(); };
+    undoButton.onClick = [this] { audioProcessor.undo(); updateMoreTrouble(); };
+    redoButton.onClick = [this] { audioProcessor.redo(); updateMoreTrouble(); };
+    learnButton.setTooltip ("Play a representative passage. Learn four seconds of audible RMS, then freeze the level correction.");
+    learnButton.onClick = [this]
+    {
+        if (audioProcessor.egoStatus() == EgoCheck::Status::learning) audioProcessor.cancelEgo();
+        else audioProcessor.learnEgo();
+        updateMoreTrouble();
+    };
+    matchButton.setTooltip ("Enable or bypass the learned correction, applied after Mix. Relearn after changing the sound.");
+    matchButton.onClick = [this] { audioProcessor.enableEgo (! audioProcessor.egoSettings().enabled); updateMoreTrouble(); };
+    dryButton.setTooltip ("Hold to hear the original input. Release to hear Smoosher again.");
+    dryButton.onStateChange = [this] { audioProcessor.auditionDry (dryButton.isDown() && drawerVisible); };
+    resetEgoButton.setTooltip ("Clear this slot's learned correction. Undo can bring it back.");
+    resetEgoButton.onClick = [this] { audioProcessor.resetEgo(); updateMoreTrouble(); };
+    egoStatusLabel.setFont (juce::FontOptions (11.0f));
+    egoStatusLabel.setColour (juce::Label::textColourId, muted);
+    egoGainLabel.setFont (juce::FontOptions (13.0f, juce::Font::bold));
+    egoGainLabel.setJustificationType (juce::Justification::centredRight);
+    egoGainLabel.setColour (juce::Label::textColourId, green);
+    addChildComponent (egoStatusLabel);
+    addChildComponent (egoGainLabel);
     refreshPresetList();
     setSize (620, 470);
+    updateMoreTrouble();
     lastMeterTime = juce::Time::getMillisecondCounterHiRes();
     startTimerHz (30);
 }
@@ -180,6 +233,8 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
 SmoosherAudioProcessorEditor::~SmoosherAudioProcessorEditor()
 {
     stopTimer();
+    audioProcessor.auditionDry (false);
+    while (activeGestures > 0) { --activeGestures; audioProcessor.endUserEdit(); }
     setLookAndFeel (nullptr);
 }
 
@@ -223,7 +278,20 @@ void SmoosherAudioProcessorEditor::paint (juce::Graphics& g)
     drawMeters (g);
     g.setColour (muted);
     g.setFont (juce::FontOptions (10.0f));
-    g.drawText ("DOUBLE-CLICK A CONTROL TO RESET", 24, 424, 285, 20, juce::Justification::centredLeft);
+    const auto ego = audioProcessor.egoSettings();
+    const auto slot = audioProcessor.activeSlot() == 0 ? "A" : "B";
+    g.drawText (juce::String (slot) + (ego.enabled ? "  /  EGO ON" : ""), 204, 424, 170, 20, juce::Justification::centredLeft);
+    if (drawerVisible)
+    {
+        g.setColour (panel);
+        g.fillRoundedRectangle (24, 477, 572, 161, 8);
+        g.setColour (muted);
+        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        g.drawText ("A/B  /  BAD DECISIONS INSURANCE", 38, 486, 350, 16, juce::Justification::centredLeft);
+        g.drawText ("EGO CHECK  /  LOUDER ISN'T BETTER", 38, 549, 360, 16, juce::Justification::centredLeft);
+        g.setColour (juce::Colour (0xff35403e));
+        g.drawHorizontalLine (541, 38, 582);
+    }
 }
 
 void SmoosherAudioProcessorEditor::resized()
@@ -240,6 +308,18 @@ void SmoosherAudioProcessorEditor::resized()
     mixLabel.setBounds (414, 422, 44, 24);
     mixSlider.setBounds (440, 402, 156, 64);
     clipButton.setBounds (545, 337, 40, 18);
+    moreButton.setBounds (24, 420, 164, 28);
+    aButton.setBounds (38, 507, 42, 26);
+    bButton.setBounds (88, 507, 42, 26);
+    copyButton.setBounds (140, 507, 112, 26);
+    undoButton.setBounds (394, 507, 90, 26);
+    redoButton.setBounds (492, 507, 90, 26);
+    learnButton.setBounds (38, 572, 86, 28);
+    matchButton.setBounds (132, 572, 96, 28);
+    dryButton.setBounds (236, 572, 112, 28);
+    resetEgoButton.setBounds (356, 572, 66, 28);
+    egoGainLabel.setBounds (430, 572, 152, 28);
+    egoStatusLabel.setBounds (33, 607, 554, 22);
 }
 
 void SmoosherAudioProcessorEditor::drawMeters (juce::Graphics& g)
@@ -312,7 +392,53 @@ void SmoosherAudioProcessorEditor::timerCallback()
         clipButton.setButtonText (clipVisible ? "CLIP" : "PEAK");
     }
     updatePresetDisplay();
+    updateMoreTrouble();
     repaint();
+}
+
+void SmoosherAudioProcessorEditor::updateMoreTrouble()
+{
+    audioProcessor.synchroniseHistory();
+    const auto open = audioProcessor.moreTroubleOpen();
+    if (open != drawerVisible)
+    {
+        drawerVisible = open;
+        for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton,
+                              &learnButton, &matchButton, &dryButton, &resetEgoButton })
+            button->setVisible (open);
+        egoStatusLabel.setVisible (open);
+        egoGainLabel.setVisible (open);
+        setSize (620, open ? 654 : 470);
+        moreButton.setButtonText (open ? "Less Trouble -" : "More Trouble +");
+    }
+    const auto slot = audioProcessor.activeSlot();
+    aButton.setToggleState (slot == 0, juce::dontSendNotification);
+    bButton.setToggleState (slot == 1, juce::dontSendNotification);
+    copyButton.setButtonText (slot == 0 ? "Copy A > B" : "Copy B > A");
+    undoButton.setEnabled (audioProcessor.canUndo());
+    redoButton.setEnabled (audioProcessor.canRedo());
+    undoButton.setTooltip ("Undo: " + audioProcessor.undoName());
+    redoButton.setTooltip ("Redo: " + audioProcessor.redoName());
+    const auto settings = audioProcessor.egoSettings();
+    const auto status = audioProcessor.egoStatus();
+    const auto learning = status == EgoCheck::Status::learning;
+    learnButton.setButtonText (learning ? "Cancel" : settings.learned ? "Relearn" : "Learn");
+    matchButton.setEnabled (settings.learned);
+    matchButton.setToggleState (settings.enabled, juce::dontSendNotification);
+    matchButton.setButtonText (settings.enabled ? "Match on" : "Match off");
+    resetEgoButton.setEnabled (settings.learned || learning);
+    egoGainLabel.setText (settings.learned ? (settings.trimDB > 0 ? "+" : "") + juce::String (settings.trimDB, 1) + " dB" : "-- dB",
+                         juce::dontSendNotification);
+    juce::String message;
+    if (learning) message = "Learning audible RMS: " + juce::String (audioProcessor.egoProgress(), 1) + " / 4.0 s. Keep the music playing.";
+    else if (status == EgoCheck::Status::noSignal) message = "Not enough audible signal. Play a passage and try Learn again.";
+    else if (status == EgoCheck::Status::cancelled) message = "Learning cancelled. Previous correction kept; ready when you are.";
+    else if (settings.learned)
+        message = (status == EgoCheck::Status::limited ? "Correction reached its limit. " : "Frozen RMS match. ")
+                + juce::String (settings.enabled ? "Hold for Dry to compare; relearn after edits." : "Match is off. Your learned correction is saved.");
+    else message = "Play a passage, hit Learn, and find out if it's good or just loud.";
+    egoStatusLabel.setText (message, juce::dontSendNotification);
+    updatePresetDisplay();
 }
 
 void SmoosherAudioProcessorEditor::refreshPresetList()

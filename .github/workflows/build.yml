@@ -76,7 +76,7 @@ jobs:
       - name: Build Windows plugin
         if: runner.os == 'Windows'
         run: cmake --build build --config Release --target Smoosher_VST3 SmoosherTests --parallel 4
-      - name: Test processor, meters, automation, and presets
+      - name: Test processor, presets, A/B, Undo, and Ego Check
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Verify universal binaries and validate AU
         if: runner.os == 'macOS'
@@ -103,6 +103,7 @@ jobs:
           mkdir -p windows-payload/VST3 dist
           cp -R build/Smoosher_artefacts/Release/VST3/Smoosher.vst3 windows-payload/VST3/
           cp README.md windows-payload/
+          cp -R docs windows-payload/
           (cd windows-payload && 7z a "../dist/Smoosher-$SMOOSHER_VERSION-Windows.zip" .)
       - uses: actions/upload-artifact@v4
         with:

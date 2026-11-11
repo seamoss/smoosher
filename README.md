@@ -2,13 +2,13 @@
 
 A free audio compressor plugin with character, by Helvete Sound, LLC. One Smoosh knob combines compression, saturation, and frequency-sensitive detection.
 
-Version **1.1.0** adds gain-reduction and stereo output meters, rounded editable value boxes, smooth control changes, user presets, and nine new factory presets. The one-knob compression curves and plugin/parameter identifiers are retained.
+Version **1.2.0** adds A/B snapshots, grouped Undo/Redo, and **Ego Check** RMS level matching in the collapsible **More Trouble** drawer. All features are free. The compact main interface, compression curves, and plugin/parameter identifiers are retained; older sessions load with Ego Check off.
 
-**[Download the 1.1.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.1.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.1.0/Smoosher-1.1.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.1.0/Smoosher-1.1.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.1.0/SHA256SUMS.txt).
+**[Download the 1.2.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.2.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.2.0/Smoosher-1.2.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.2.0/Smoosher-1.2.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.2.0/SHA256SUMS.txt).
 
-<img src="docs/images/smoosher-1.1.0.png" alt="Smoosher 1.1.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
+<img src="docs/images/smoosher-1.2.0.png" alt="Smoosher 1.2.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
 
-See the [quick start and meter guide](docs/USAGE.md) for controls, preset saving, Hammer mode, and tester feedback. Screenshots are rendered from the 1.1.0 editor with an example test signal; meter readings depend on your audio.
+See the [quick start and meter guide](docs/USAGE.md) for the main controls and the [More Trouble guide](docs/MORE-TROUBLE.md) for A/B, Undo, and Ego Check. Screenshots are rendered from the 1.2.0 editor with an example test signal; meter readings depend on your audio.
 
 ## Controls
 
@@ -17,7 +17,7 @@ See the [quick start and meter guide](docs/USAGE.md) for controls, preset saving
 - **Output, −12 to +12 dB:** trims the wet output after compression and soft clipping. This is not a final output ceiling; positive gain can produce peaks above 0 dBFS.
 - **Mix, 0–100%:** blends the original dry input with the processed wet signal. Preset changes leave Mix alone.
 
-The interface is 620 × 470 pixels, with a compact Mix knob below the meters. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final dry/wet output with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
+The compact interface is 620 × 470 pixels, with a small Mix knob below the meters. **More Trouble +** expands it to 620 × 654 for A/B, Undo/Redo, and Ego Check. Each A/B slot includes all four controls, preset identity, and its learned match settings; both slots save with the session. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final output after dry/wet blending and any Ego Check correction with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
 
 Sixteen factory presets plus Init are included. The original seven:
 
@@ -53,13 +53,13 @@ Use **Save...** to store a named user preset. User presets preserve Input, Smoos
 
 ## Installation
 
-The [1.1.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.1.0) is available now with the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Older 1.0.0 downloads use the original ZIP/manual installation process.
+The [1.2.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.2.0) is available now with the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Older 1.0.0 downloads use the original ZIP/manual installation process.
 
 ### macOS
 
 The release build targets **macOS 11 or later**, with both **Apple Silicon and Intel** code in each plugin. Hosted CI validates on macOS 15; the minimum OS target is not a claim that every OS/DAW combination has been tested.
 
-1. Close your DAW and download `Smoosher-1.1.0-macOS-universal.pkg` from the published release.
+1. Close your DAW and download `Smoosher-1.2.0-macOS-universal.pkg` from the published release.
 2. Open the signed, notarized installer and follow the prompts. Administrator authorization is required because it installs for all users:
    - AU: `/Library/Audio/Plug-Ins/Components/Smoosher.component`
    - VST3: `/Library/Audio/Plug-Ins/VST3/Smoosher.vst3`
@@ -70,7 +70,7 @@ The installer contains AU and VST3. The standalone app is available when buildin
 
 ### Windows
 
-1. Close your DAW and download `Smoosher-1.1.0-Windows.zip` from the published release.
+1. Close your DAW and download `Smoosher-1.2.0-Windows.zip` from the published release.
 2. Extract it and copy the entire `VST3/Smoosher.vst3` bundle into `C:\Program Files\Common Files\VST3\`. Administrator authorization may be required.
 3. Open your DAW and rescan plugins if necessary.
 

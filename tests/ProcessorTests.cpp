@@ -170,6 +170,8 @@ void testUnicodePresetRecall()
 }
 }
 
+#include "MoreTroubleTests.h"
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI initialise;
@@ -177,6 +179,7 @@ int main()
     {
         testPassthroughAndMeters(); testSmoothingAndStereo(); testReductionAndRates();
         testPresetRecall(); testUserPresets(); testUnicodePresetRecall();
+        testMoreTrouble();
         std::cout << "All processor, metering, automation, and preset checks passed.\n";
         return 0;
     }
