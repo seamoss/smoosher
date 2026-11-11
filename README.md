@@ -4,6 +4,12 @@ A free audio compressor plugin with character, by Helvete Sound, LLC. One Smoosh
 
 Version **1.1.0** adds gain-reduction and stereo output meters, rounded editable value boxes, smooth control changes, user presets, and nine new factory presets. The one-knob compression curves and plugin/parameter identifiers are retained.
 
+**[Download the 1.1.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.1.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.1.0/Smoosher-1.1.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.1.0/Smoosher-1.1.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.1.0/SHA256SUMS.txt).
+
+<img src="docs/images/smoosher-1.1.0.png" alt="Smoosher 1.1.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
+
+See the [quick start and meter guide](docs/USAGE.md) for controls, preset saving, Hammer mode, and tester feedback. Screenshots are rendered from the 1.1.0 editor with an example test signal; meter readings depend on your audio.
+
 ## Controls
 
 - **Smoosh, 0–100%:** controls compression threshold, ratio, attack, release, makeup gain, saturation, and filtering. Above 60%, Hammer mode adds faster attack and soft clipping.
@@ -47,7 +53,7 @@ Use **Save...** to store a named user preset. User presets preserve Input, Smoos
 
 ## Installation
 
-Download published assets from [GitHub Releases](https://github.com/seamoss/smoosher/releases). The release workflow prepares the assets below as a draft; they become public when the maintainer publishes the release. Older 1.0.0 downloads use the original ZIP/manual installation process.
+The [1.1.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.1.0) is available now with the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Older 1.0.0 downloads use the original ZIP/manual installation process.
 
 ### macOS
 

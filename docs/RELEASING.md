@@ -2,6 +2,14 @@
 
 Version 1.1.0 adds metering, control smoothing, and preset improvements. Keep JUCE at 8.0.4 and preserve plugin/parameter identifiers. The previously notarized 1.0.1 installer is a separate artifact; changed binaries must be signed and notarized again before distribution.
 
+## Published 1.1.0 tester release
+
+[Smoosher 1.1.0](https://github.com/seamoss/smoosher/releases/tag/v1.1.0) was built from commit `0ce8b2b092bd48321cb06d472e1656463cb92309` by [release CI run 43106218266](https://github.com/seamoss/smoosher/actions/runs/43106218266). Both platform builds and regression checks passed. CI validated the AU, signed the universal Mac payload and installer, obtained Apple notarization acceptance with no issues, stapled the ticket, and created the draft release.
+
+Before publication, the downloaded assets passed their checksums; the Mac installer passed signature, stapled-ticket, Gatekeeper, and embedded bundle-signature verification. Its VST3 passed pluginval strictness 5 with GUI tests skipped. The Windows ZIP was checked for its x64 VST3 binary, 1.1.0 manifest, and installation instructions. The release is marked as a **prerelease** for broader DAW and OS testing.
+
+The `macos-release` environment is configured with the five secrets and three variables described below, and access is restricted to `v*` tags. Credential values stay in GitHub's encrypted secrets and the local Keychain.
+
 ## Release outputs
 
 - `Smoosher-1.1.0-macOS-universal.pkg`: Developer ID signed AU/VST3 installer, notarized by Apple with the ticket stapled. Installs to `/Library/Audio/Plug-Ins/` for all users. Targets macOS 11+ on arm64 and x86_64.
