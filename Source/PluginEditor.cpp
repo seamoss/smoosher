@@ -1,253 +1,380 @@
-#include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
-// Custom LookAndFeel Implementation
-void GradientSliderLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                                                   float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-                                                   juce::Slider& slider)
+namespace
 {
-    auto radius = (float) juce::jmin (width / 2, height / 2) - 4.0f;
-    auto centreX = (float) x + (float) width * 0.5f;
-    auto centreY = (float) y + (float) height * 0.5f;
-    auto rx = centreX - radius;
-    auto ry = centreY - radius;
-    auto rw = radius * 2.0f;
-    auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-    // Interpolate color from green (0) to red (1) based on slider position
-    juce::Colour fillColour = juce::Colour::fromHSV(
-        juce::jmap(sliderPos, 0.33f, 0.0f),  // Hue: 0.33 (green) to 0.0 (red)
-        0.8f,  // Saturation
-        0.7f,  // Brightness
-        1.0f   // Alpha
-    );
-
-    // Draw the filled arc
-    g.setColour(fillColour);
-    juce::Path filledArc;
-    filledArc.addPieSegment(rx, ry, rw, rw, rotaryStartAngle, angle, 0.8f);
-    g.fillPath(filledArc);
-
-    // Draw the background arc (unfilled portion)
-    g.setColour(juce::Colour(0xff404040));
-    juce::Path backgroundArc;
-    backgroundArc.addPieSegment(rx, ry, rw, rw, angle, rotaryEndAngle, 0.8f);
-    g.fillPath(backgroundArc);
-
-    // Draw the outline
-    g.setColour(juce::Colour(0xff606060));
-    g.drawEllipse(rx, ry, rw, rw, 2.0f);
-
-    // Draw the pointer
-    juce::Path pointer;
-    auto pointerLength = radius * 0.6f;
-    auto pointerThickness = 3.0f;
-    pointer.addRectangle(-pointerThickness * 0.5f, -radius, pointerThickness, pointerLength);
-    g.setColour(juce::Colours::white);
-    g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+const juce::Colour background { 0xff171c1d }, panel { 0xff202728 }, text { 0xffecf1e9 };
+const juce::Colour muted { 0xff9aa8a6 }, green { 0xffb7df80 }, amber { 0xffefb76d }, red { 0xfff07167 };
+juce::String levelText (float db) { return db <= -60.0f ? "-inf" : juce::String (db, 1); }
+constexpr float inputCornerRadius = 6.0f;
 }
 
-//==============================================================================
-SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcessor& p)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+SmoosherLookAndFeel::SmoosherLookAndFeel()
 {
-    // Set window size (with room for preset selector and mix control)
-    setSize (500, 260);
+    setColour (juce::Slider::textBoxTextColourId, text);
+    setColour (juce::Slider::textBoxBackgroundColourId, juce::Colour (0xff121718));
+    setColour (juce::Slider::textBoxOutlineColourId, juce::Colour (0xff374242));
+    setColour (juce::Slider::textBoxHighlightColourId, green.withAlpha (0.3f));
+    setColour (juce::Slider::thumbColourId, green);
+    setColour (juce::Slider::trackColourId, green);
+    setColour (juce::Slider::backgroundColourId, juce::Colour (0xff35403e));
+    setColour (juce::ComboBox::backgroundColourId, panel);
+    setColour (juce::ComboBox::textColourId, text);
+    setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff3b4846));
+    setColour (juce::ComboBox::arrowColourId, green);
+    setColour (juce::PopupMenu::backgroundColourId, panel);
+    setColour (juce::PopupMenu::textColourId, text);
+    setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff40513d));
+    setColour (juce::PopupMenu::highlightedTextColourId, text);
+    setColour (juce::TextButton::buttonColourId, juce::Colour (0xff303b37));
+    setColour (juce::TextButton::textColourOffId, text);
+    setColour (juce::Label::textColourId, text);
+    setColour (juce::AlertWindow::backgroundColourId, panel);
+    setColour (juce::AlertWindow::textColourId, text);
+}
 
-    // Setup factory presets
-    setupPresets();
-
-    // Configure preset selector
-    presetLabel.setText("PRESET:", juce::dontSendNotification);
-    presetLabel.setFont(juce::Font(12.0f, juce::Font::bold));
-    presetLabel.setJustificationType(juce::Justification::centredRight);
-    presetLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible(presetLabel);
-
-    presetComboBox.addItem("-- Init --", 1);
-    for (int i = 0; i < factoryPresets.size(); ++i)
-        presetComboBox.addItem(factoryPresets[i].name, i + 2);
-
-    presetComboBox.setSelectedId(1, juce::dontSendNotification);
-    presetComboBox.onChange = [this] {
-        int selectedId = presetComboBox.getSelectedId();
-        if (selectedId == 1)
-        {
-            // Load Init preset (all zeros)
-            audioProcessor.getAPVTS().getParameter("smoosh")->setValueNotifyingHost(0.0f);
-            audioProcessor.getAPVTS().getParameter("inputGain")->setValueNotifyingHost(0.0f);
-            audioProcessor.getAPVTS().getParameter("outputGain")->setValueNotifyingHost(0.5f); // 0.5 = 0dB (middle of -12 to +12)
-        }
-        else if (selectedId > 1)
-        {
-            loadPreset(selectedId - 2);
-        }
+juce::Label* SmoosherLookAndFeel::createSliderTextBox (juce::Slider& slider)
+{
+    auto* label = juce::LookAndFeel_V4::createSliderTextBox (slider);
+    label->setColour (juce::Label::outlineWhenEditingColourId, green);
+    label->onEditorShow = [label]
+    {
+        if (auto* editor = label->getCurrentTextEditor())
+            editor->setOpaque (false);
     };
+    return label;
+}
 
-    // Set custom look and feel for smaller font
-    presetComboBox.setLookAndFeel(&comboBoxLookAndFeel);
-    presetComboBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
+void SmoosherLookAndFeel::drawLabel (juce::Graphics& g, juce::Label& label)
+{
+    if (dynamic_cast<juce::Slider*> (label.getParentComponent()) == nullptr)
+    {
+        juce::LookAndFeel_V4::drawLabel (g, label);
+        return;
+    }
 
-    addAndMakeVisible(presetComboBox);
+    const auto bounds = label.getLocalBounds().toFloat().reduced (0.5f);
+    const auto alpha = label.isEnabled() ? 1.0f : 0.5f;
+    g.setColour (label.findColour (juce::Label::backgroundColourId));
+    g.fillRoundedRectangle (bounds, inputCornerRadius);
+    if (! label.isBeingEdited())
+    {
+        g.setColour (label.findColour (juce::Label::textColourId).withMultipliedAlpha (alpha));
+        g.setFont (getLabelFont (label));
+        g.drawFittedText (label.getText(), getLabelBorderSize (label).subtractedFrom (label.getLocalBounds()),
+                          label.getJustificationType(), 1, label.getMinimumHorizontalScale());
+        g.setColour (label.findColour (juce::Label::outlineColourId).withMultipliedAlpha (alpha));
+        g.drawRoundedRectangle (bounds, inputCornerRadius, 1.0f);
+    }
+}
 
-    // Configure Smoosh slider (main knob - center)
-    smooshSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    smooshSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    smooshSlider.setScrollWheelEnabled(true);
-    smooshSlider.setLookAndFeel(&gradientLookAndFeel);
-    addAndMakeVisible(smooshSlider);
+void SmoosherLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& editor)
+{
+    g.setColour (editor.findColour (juce::TextEditor::backgroundColourId));
+    g.fillRoundedRectangle (juce::Rectangle<float> (static_cast<float> (width), static_cast<float> (height)).reduced (0.5f),
+                            inputCornerRadius);
+}
 
-    smooshLabel.setText("SMOOSH", juce::dontSendNotification);
-    smooshLabel.setFont(juce::Font(16.0f, juce::Font::bold));
-    smooshLabel.setJustificationType(juce::Justification::centred);
-    smooshLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    smooshLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(smooshLabel);
+void SmoosherLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int height, juce::TextEditor& editor)
+{
+    const auto focused = editor.hasKeyboardFocus (true) && ! editor.isReadOnly();
+    g.setColour (editor.findColour (focused ? juce::TextEditor::focusedOutlineColourId : juce::TextEditor::outlineColourId)
+                      .withMultipliedAlpha (editor.isEnabled() ? 1.0f : 0.5f));
+    g.drawRoundedRectangle (juce::Rectangle<float> (static_cast<float> (width), static_cast<float> (height)).reduced (0.75f),
+                            inputCornerRadius, focused ? 1.5f : 1.0f);
+}
 
-    smooshAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "smoosh", smooshSlider);
+void SmoosherLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                                           float position, float startAngle, float endAngle, juce::Slider& slider)
+{
+    const auto bounds = juce::Rectangle<float> (static_cast<float> (x), static_cast<float> (y),
+                                               static_cast<float> (width), static_cast<float> (height)).reduced (10);
+    const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
+    const auto centre = bounds.getCentre();
+    const auto angle = startAngle + position * (endAngle - startAngle);
+    const auto colour = slider.getName() == "Smoosh" ? green.interpolatedWith (red, position * 0.9f) : green;
+    juce::Path track, fill;
+    track.addCentredArc (centre.x, centre.y, radius, radius, 0, startAngle, endAngle, true);
+    fill.addCentredArc (centre.x, centre.y, radius, radius, 0, startAngle, angle, true);
+    g.setColour (juce::Colour (0xff35413d));
+    g.strokePath (track, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour (colour);
+    g.strokePath (fill, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    const auto face = juce::Rectangle<float> (radius * 1.65f, radius * 1.65f).withCentre (centre);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff394341), face.getTopLeft(),
+                                            juce::Colour (0xff202726), face.getBottomRight(), false));
+    g.fillEllipse (face);
+    g.setColour (juce::Colour (0xff4c5852));
+    g.drawEllipse (face, 1.0f);
+    const juce::Point<float> tip (centre.x + std::sin (angle) * radius * 0.66f,
+                                 centre.y - std::cos (angle) * radius * 0.66f);
+    const juce::Point<float> base (centre.x + std::sin (angle) * radius * 0.38f,
+                                  centre.y - std::cos (angle) * radius * 0.38f);
+    g.setColour (text);
+    g.drawLine ({ base, tip }, 3.0f);
+}
 
-    // Configure Input Gain slider
-    inputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    inputGainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    inputGainSlider.setScrollWheelEnabled(true);
-    inputGainSlider.setLookAndFeel(&gradientLookAndFeel);
-    addAndMakeVisible(inputGainSlider);
+SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcessor& processor)
+    : AudioProcessorEditor (&processor), audioProcessor (processor)
+{
+    setLookAndFeel (&lookAndFeel);
+    configureKnob (inputGainSlider, inputGainLabel, "Input", "Drive into the compressor. Double-click to reset to 0 dB.");
+    configureKnob (smooshSlider, smooshLabel, "Smoosh", "Compression and colour. Above 60% enters Hammer mode. Double-click to reset.");
+    configureKnob (outputGainSlider, outputGainLabel, "Output", "Wet output trim. Double-click to reset to 0 dB.");
+    mixSlider.setName ("Mix");
+    mixSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    mixSlider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
+    mixSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 65, 24);
+    mixSlider.setTooltip ("Blend the dry input with the wet signal. Presets leave Mix unchanged. Double-click for 100% wet.");
+    addAndMakeVisible (mixSlider);
+    mixLabel.setText ("MIX", juce::dontSendNotification);
+    mixLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
+    mixLabel.setColour (juce::Label::textColourId, muted);
+    addAndMakeVisible (mixLabel);
 
-    inputGainLabel.setText("INPUT", juce::dontSendNotification);
-    inputGainLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-    inputGainLabel.setJustificationType(juce::Justification::centred);
-    inputGainLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    inputGainLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(inputGainLabel);
+    auto& state = audioProcessor.getAPVTS();
+    using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    smooshAttachment = std::make_unique<Attachment> (state, "smoosh", smooshSlider);
+    inputGainAttachment = std::make_unique<Attachment> (state, "inputGain", inputGainSlider);
+    outputGainAttachment = std::make_unique<Attachment> (state, "outputGain", outputGainSlider);
+    mixAttachment = std::make_unique<Attachment> (state, "mix", mixSlider);
 
-    inputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "inputGain", inputGainSlider);
-
-    // Configure Output Gain slider
-    outputGainSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputGainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    outputGainSlider.setScrollWheelEnabled(true);
-    outputGainSlider.setLookAndFeel(&gradientLookAndFeel);
-    addAndMakeVisible(outputGainSlider);
-
-    outputGainLabel.setText("GAIN", juce::dontSendNotification);
-    outputGainLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-    outputGainLabel.setJustificationType(juce::Justification::centred);
-    outputGainLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    outputGainLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(outputGainLabel);
-
-    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "outputGain", outputGainSlider);
-
-    // Configure Mix slider
-    mixSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    mixSlider.setScrollWheelEnabled(true);
-    mixSlider.setLookAndFeel(&gradientLookAndFeel);
-    addAndMakeVisible(mixSlider);
-
-    mixLabel.setText("MIX", juce::dontSendNotification);
-    mixLabel.setFont(juce::Font(10.0f, juce::Font::bold));
-    mixLabel.setJustificationType(juce::Justification::centred);
-    mixLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-    mixLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(mixLabel);
-
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "mix", mixSlider);
+    presetComboBox.setName ("Preset");
+    presetComboBox.setTooltip ("Factory and user presets. An asterisk means the preset has been modified.");
+    presetComboBox.onChange = [this]
+    {
+        const auto id = presetComboBox.getSelectedId();
+        if (id > 0 && id <= static_cast<int> (SmoosherAudioProcessor::factoryPresets().size()))
+            audioProcessor.loadPreset (SmoosherAudioProcessor::factoryPresets()[static_cast<size_t> (id - 1)]);
+        else if (id >= 1000 && id - 1000 < userPresets.size())
+        {
+            const auto result = audioProcessor.loadUserPreset (userPresets.getReference (id - 1000));
+            if (result.failed())
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Unable to load preset", result.getErrorMessage());
+        }
+        updatePresetDisplay();
+    };
+    addAndMakeVisible (presetComboBox);
+    saveButton.onClick = [this] { savePreset(); };
+    saveButton.setTooltip ("Save Input, Smoosh, and Output as a user preset. Mix remains independent.");
+    addAndMakeVisible (saveButton);
+    modifiedLabel.setText ("MODIFIED", juce::dontSendNotification);
+    modifiedLabel.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+    modifiedLabel.setColour (juce::Label::textColourId, amber);
+    addChildComponent (modifiedLabel);
+    clipButton.setTooltip ("Lights when final output reaches 0 dBFS. Click to clear the peak indication.");
+    clipButton.onClick = [this]
+    {
+        audioProcessor.clearClip();
+        heldPeak = -100.0f;
+        peakHoldUntil = 0;
+        timerCallback();
+    };
+    addAndMakeVisible (clipButton);
+    refreshPresetList();
+    setSize (620, 470);
+    lastMeterTime = juce::Time::getMillisecondCounterHiRes();
+    startTimerHz (30);
 }
 
 SmoosherAudioProcessorEditor::~SmoosherAudioProcessorEditor()
 {
-    // Clean up LookAndFeel
-    smooshSlider.setLookAndFeel(nullptr);
-    inputGainSlider.setLookAndFeel(nullptr);
-    outputGainSlider.setLookAndFeel(nullptr);
-    mixSlider.setLookAndFeel(nullptr);
-    presetComboBox.setLookAndFeel(nullptr);
+    stopTimer();
+    setLookAndFeel (nullptr);
 }
 
-//==============================================================================
+void SmoosherAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::Label& label,
+                                                 const juce::String& name, const juce::String& tooltip)
+{
+    slider.setName (name);
+    slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 92, 24);
+    slider.setScrollWheelEnabled (true);
+    slider.setTooltip (tooltip);
+    slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
+    label.setText (name.toUpperCase(), juce::dontSendNotification);
+    label.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+    label.setJustificationType (juce::Justification::centred);
+    label.setColour (juce::Label::textColourId, muted);
+    addAndMakeVisible (slider);
+    addAndMakeVisible (label);
+}
+
 void SmoosherAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // Background
-    g.fillAll(juce::Colour(0xff2a2a2a));
+    g.fillAll (background);
+    g.setColour (green);
+    g.setFont (juce::FontOptions (25.0f, juce::Font::bold));
+    g.drawText ("SMOOSHER", 24, 15, 240, 32, juce::Justification::centredLeft);
+    g.setColour (muted);
+    g.setFont (juce::FontOptions (10.0f));
+    g.drawText ("HELVETE SOUND  /  CHARACTER COMPRESSOR", 25, 45, 350, 17, juce::Justification::centredLeft);
+    g.drawText ("v" + juce::String (JucePlugin_VersionString), 516, 24, 80, 20, juce::Justification::centredRight);
+    g.setColour (juce::Colour (0xff303a37));
+    g.drawHorizontalLine (65, 24, 596);
+    if (smooshSlider.getValue() > 60.0)
+    {
+        g.setColour (amber.withAlpha (0.15f));
+        g.fillRoundedRectangle (270, 303, 80, 18, 4);
+        g.setColour (amber);
+        g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+        g.drawText ("HAMMER", 270, 303, 80, 18, juce::Justification::centred);
+    }
+    drawMeters (g);
+    g.setColour (muted);
+    g.setFont (juce::FontOptions (10.0f));
+    g.drawText ("DOUBLE-CLICK A CONTROL TO RESET", 24, 424, 285, 20, juce::Justification::centredLeft);
 }
 
 void SmoosherAudioProcessorEditor::resized()
 {
-    auto bounds = getLocalBounds().reduced(10);
-
-    // Preset selector at top right
-    auto presetArea = bounds.removeFromTop(30);
-    presetArea.removeFromTop(5); // Small top margin
-
-    // Align to the right
-    auto presetWidth = 250;
-    presetArea.removeFromLeft(bounds.getWidth() - presetWidth); // Push to right
-    presetComboBox.setBounds(presetArea.removeFromRight(presetWidth - 65).reduced(5, 0));
-    presetLabel.setBounds(presetArea.reduced(0, 0));
-
-    bounds.removeFromTop(-5); // Reduced spacing to close gap
-
-    // Divide into three equal columns for controls
-    int controlWidth = bounds.getWidth() / 3;
-
-    // Input (left)
-    auto inputArea = bounds.removeFromLeft(controlWidth);
-    auto inputSliderBounds = inputArea.withSizeKeepingCentre(110, 110);
-    inputGainSlider.setBounds(inputSliderBounds);
-    inputGainLabel.setBounds(inputSliderBounds);
-
-    // Smoosh (center - slightly larger)
-    auto smooshArea = bounds.removeFromLeft(controlWidth);
-    auto smooshSliderBounds = smooshArea.withSizeKeepingCentre(140, 140);
-    smooshSlider.setBounds(smooshSliderBounds);
-    smooshLabel.setBounds(smooshSliderBounds);
-
-    // Output (right)
-    auto outputArea = bounds;
-    auto outputSliderBounds = outputArea.withSizeKeepingCentre(110, 110);
-    outputGainSlider.setBounds(outputSliderBounds);
-    outputGainLabel.setBounds(outputSliderBounds);
-
-    // Mix control at bottom right (below main controls)
-    auto mixArea = getLocalBounds().removeFromBottom(64).removeFromRight(69).reduced(5);
-    auto mixSliderBounds = mixArea.withSizeKeepingCentre(48, 48);
-    mixSlider.setBounds(mixSliderBounds);
-    mixLabel.setBounds(mixSliderBounds);
+    presetComboBox.setBounds (24, 77, 310, 28);
+    saveButton.setBounds (344, 77, 76, 28);
+    modifiedLabel.setBounds (430, 77, 110, 28);
+    inputGainLabel.setBounds (34, 123, 144, 20);
+    inputGainSlider.setBounds (34, 145, 144, 152);
+    smooshLabel.setBounds (218, 113, 184, 20);
+    smooshSlider.setBounds (218, 135, 184, 162);
+    outputGainLabel.setBounds (442, 123, 144, 20);
+    outputGainSlider.setBounds (442, 145, 144, 152);
+    mixLabel.setBounds (396, 422, 40, 24);
+    mixSlider.setBounds (440, 402, 156, 64);
+    clipButton.setBounds (545, 337, 40, 18);
 }
 
-//==============================================================================
-void SmoosherAudioProcessorEditor::setupPresets()
+void SmoosherAudioProcessorEditor::drawMeters (juce::Graphics& g)
 {
-    // Factory presets
-    // Format: {"Name", Smoosh %, Input dB (0-30), Output/Gain dB (-12 to +12)}
-    factoryPresets.push_back({"Hell Smarsh", 45.0f, 15.0f, 1.0f});
-    factoryPresets.push_back({"Wenger's 7-String", 60.0f, 10.5f, 2.0f});
-    factoryPresets.push_back({"That Joe Sound", 70.0f, 15.0f, 0.0f});
-    factoryPresets.push_back({"Gravy River", 70.0f, 12.0f, 2.0f});
-    factoryPresets.push_back({"Dani Time", 30.0f, 35.0f, 2.0f});
-    factoryPresets.push_back({"Gloopy", 40.0f, 7.5f, 1.0f});
-    factoryPresets.push_back({"Limit THIS!", 75.0f, 24.0f, 3.0f});
-}
+    g.setColour (panel);
+    g.fillRoundedRectangle (24, 326, 572, 71, 8);
+    g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
+    g.setColour (muted);
+    g.drawText ("GAIN REDUCTION", 38, 336, 155, 18, juce::Justification::centredLeft);
+    g.drawText ("OUTPUT", 327, 336, 90, 18, juce::Justification::centredLeft);
+    g.setColour (amber);
+    g.drawText (juce::String (displayedReduction, 1) + " dB", 205, 336, 70, 18, juce::Justification::centredRight);
+    g.setColour (clipVisible ? red : text);
+    g.drawText (levelText (heldPeak) + " dBFS", 425, 336, 110, 18, juce::Justification::centredRight);
 
-void SmoosherAudioProcessorEditor::loadPreset(int presetIndex)
-{
-    if (presetIndex >= 0 && presetIndex < factoryPresets.size())
+    auto bar = [&g] (float x, float y, float width, float amount, juce::Colour colour)
     {
-        const auto& preset = factoryPresets[presetIndex];
+        g.setColour (juce::Colour (0xff101617));
+        g.fillRoundedRectangle (x, y, width, 6, 2);
+        g.setColour (colour);
+        if (amount > 0)
+            g.fillRoundedRectangle (x, y, width * juce::jlimit (0.0f, 1.0f, amount), 6, 2);
+    };
+    bar (38, 362, 237, displayedReduction / 24.0f, amber);
+    const auto leftDB = juce::Decibels::gainToDecibels (displayedLeft, -60.0f);
+    const auto rightDB = juce::Decibels::gainToDecibels (displayedRight, -60.0f);
+    bar (327, 360, 257, (leftDB + 60.0f) / 60.0f, leftDB >= 0 ? red : green);
+    bar (327, 369, 257, (rightDB + 60.0f) / 60.0f, rightDB >= 0 ? red : green);
+    g.setColour (muted);
+    g.setFont (juce::FontOptions (9.0f));
+    const auto scaleLabel = [&g] (const juce::String& label, float x, float y, bool first, bool last)
+    {
+        const auto bounds = juce::Rectangle<float> (first ? x : last ? x - 28.0f : x - 14.0f, y, 28.0f, 12.0f);
+        g.drawText (label, bounds, first ? juce::Justification::centredLeft
+                                      : last ? juce::Justification::centredRight : juce::Justification::centred);
+    };
+    for (int reduction = 0; reduction <= 24; reduction += 6)
+        scaleLabel (juce::String (reduction), 38.0f + 237.0f * static_cast<float> (reduction) / 24.0f,
+                    375, reduction == 0, reduction == 24);
+    for (const auto db : { -60, -36, -18, 0 })
+        scaleLabel (juce::String (db), 327.0f + 257.0f * static_cast<float> (db + 60) / 60.0f,
+                    380, db == -60, db == 0);
+    g.drawText ("L", 316, 357, 9, 12, juce::Justification::centredLeft);
+    g.drawText ("R", 316, 366, 9, 12, juce::Justification::centredLeft);
+}
 
-        // Update parameter values
-        auto* smooshParam = audioProcessor.getAPVTS().getRawParameterValue("smoosh");
-        auto* inputParam = audioProcessor.getAPVTS().getRawParameterValue("inputGain");
-        auto* outputParam = audioProcessor.getAPVTS().getRawParameterValue("outputGain");
-
-        if (smooshParam) audioProcessor.getAPVTS().getParameter("smoosh")->setValueNotifyingHost(preset.smoosh / 100.0f);
-        if (inputParam) audioProcessor.getAPVTS().getParameter("inputGain")->setValueNotifyingHost(preset.inputGain / 30.0f);
-        if (outputParam) audioProcessor.getAPVTS().getParameter("outputGain")->setValueNotifyingHost((preset.outputGain + 12.0f) / 24.0f);
+void SmoosherAudioProcessorEditor::timerCallback()
+{
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    const auto seconds = static_cast<float> (juce::jlimit (0.0, 1.0, (now - lastMeterTime) / 1000.0));
+    lastMeterTime = now;
+    const auto meters = audioProcessor.consumeMeters();
+    const auto decay = std::pow (10.0f, -24.0f * seconds / 20.0f);
+    displayedLeft = juce::jmax (meters.left, displayedLeft * decay);
+    displayedRight = juce::jmax (meters.right, displayedRight * decay);
+    displayedReduction = juce::jmax (meters.reductionDB, displayedReduction - 18.0f * seconds);
+    const auto peak = juce::Decibels::gainToDecibels (juce::jmax (meters.left, meters.right), -100.0f);
+    if (peak >= heldPeak)
+    {
+        heldPeak = peak;
+        peakHoldUntil = now + 1500.0;
     }
+    else if (now > peakHoldUntil)
+        heldPeak = juce::jmax (peak, heldPeak - 24.0f * seconds);
+    if (meters.clipped != clipVisible)
+    {
+        clipVisible = meters.clipped;
+        clipButton.setColour (juce::TextButton::buttonColourId, clipVisible ? red : juce::Colour (0xff303b37));
+        clipButton.setColour (juce::TextButton::textColourOffId, clipVisible ? background : muted);
+        clipButton.setButtonText (clipVisible ? "CLIP" : "PEAK");
+    }
+    updatePresetDisplay();
+    repaint();
+}
+
+void SmoosherAudioProcessorEditor::refreshPresetList()
+{
+    presetComboBox.clear (juce::dontSendNotification);
+    presetComboBox.addSectionHeading ("FACTORY");
+    int id = 1;
+    for (const auto& preset : SmoosherAudioProcessor::factoryPresets())
+        presetComboBox.addItem (preset.name, id++);
+    userPresets = SmoosherAudioProcessor::userPresetDirectory().findChildFiles (juce::File::findFiles, false, "*.smoosherpreset");
+    std::sort (userPresets.begin(), userPresets.end(), [] (const auto& a, const auto& b)
+               { return a.getFileName().compareNatural (b.getFileName()) < 0; });
+    if (! userPresets.isEmpty())
+    {
+        presetComboBox.addSeparator();
+        presetComboBox.addSectionHeading ("USER");
+        for (int i = 0; i < userPresets.size(); ++i)
+        {
+            const auto xml = juce::XmlDocument::parse (userPresets.getReference (i));
+            const auto name = xml != nullptr ? xml->getStringAttribute ("name") : juce::String();
+            presetComboBox.addItem (name.isNotEmpty() ? name : userPresets.getReference (i).getFileNameWithoutExtension(), 1000 + i);
+        }
+    }
+    updatePresetDisplay();
+}
+
+void SmoosherAudioProcessorEditor::updatePresetDisplay()
+{
+    const auto preset = audioProcessor.getCurrentPreset();
+    const auto modified = audioProcessor.isPresetModified();
+    const auto name = preset.name + (modified ? " *" : "");
+    if (presetComboBox.getText() != name)
+        presetComboBox.setText (name, juce::dontSendNotification);
+    modifiedLabel.setVisible (modified);
+}
+
+void SmoosherAudioProcessorEditor::savePreset()
+{
+    auto* dialog = new juce::AlertWindow ("Save user preset", "Save Input, Smoosh, and Output. Mix stays independent.", juce::MessageBoxIconType::NoIcon);
+    auto name = audioProcessor.getCurrentPreset().name;
+    for (const auto& preset : SmoosherAudioProcessor::factoryPresets())
+        if (preset.name == name)
+            name = "My " + name;
+    dialog->addTextEditor ("name", name, "Preset name");
+    dialog->getTextEditor ("name")->setInputRestrictions (64);
+    dialog->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    dialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    const juce::Component::SafePointer<SmoosherAudioProcessorEditor> safeThis (this);
+    dialog->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, dialog] (int result)
+    {
+        if (result != 1 || safeThis == nullptr)
+            return;
+        const auto presetName = dialog->getTextEditorContents ("name").trim();
+        const auto fileName = juce::File::createLegalFileName (presetName);
+        bool reserved = presetName.equalsIgnoreCase ("Custom");
+        for (const auto& preset : SmoosherAudioProcessor::factoryPresets())
+            reserved = reserved || preset.name.equalsIgnoreCase (presetName);
+        auto saved = juce::Result::fail ("Choose a new name for your user preset.");
+        if (! reserved && fileName.isNotEmpty())
+            saved = safeThis->audioProcessor.saveUserPreset (SmoosherAudioProcessor::userPresetDirectory().getChildFile (fileName + ".smoosherpreset"), presetName);
+        if (saved.failed())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Unable to save preset", saved.getErrorMessage());
+        else
+            safeThis->refreshPresetList();
+    }), true);
 }

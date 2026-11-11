@@ -15,6 +15,10 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
 #endif
     apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
+    smooshParameter = apvts.getRawParameterValue ("smoosh");
+    inputParameter = apvts.getRawParameterValue ("inputGain");
+    outputParameter = apvts.getRawParameterValue ("outputGain");
+    mixParameter = apvts.getRawParameterValue ("mix");
 }
 
 SmoosherAudioProcessor::~SmoosherAudioProcessor()
@@ -137,11 +141,10 @@ void SmoosherAudioProcessor::changeProgramName (int index, const juce::String& n
 //==============================================================================
 void SmoosherAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    currentSampleRate = sampleRate;
-    envelope.resize(getTotalNumOutputChannels(), 0.0f);
-    hpState1.resize(getTotalNumOutputChannels(), 0.0f);
-    hpState2.resize(getTotalNumOutputChannels(), 0.0f);
-    lpState.resize(getTotalNumOutputChannels(), 0.0f);
+    juce::ignoreUnused (samplesPerBlock);
+    dsp.prepare (sampleRate, controls());
+    meterLeft.store (0); meterRight.store (0); meterReduction.store (0);
+    outputClipped.store (false);
 }
 
 void SmoosherAudioProcessor::releaseResources()
@@ -169,239 +172,33 @@ bool SmoosherAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts)
 }
 #endif
 
+SmoosherDSP::Controls SmoosherAudioProcessor::controls() const
+{
+    return { smooshParameter->load(), inputParameter->load(), outputParameter->load(), mixParameter->load() };
+}
+
 void SmoosherAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
-
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
-
-    // Get parameter values
-    float smooshAmount = apvts.getRawParameterValue("smoosh")->load();
-    float inputGainDB = apvts.getRawParameterValue("inputGain")->load();
-    float outputGainDB = apvts.getRawParameterValue("outputGain")->load();
-    float mixAmount = apvts.getRawParameterValue("mix")->load() / 100.0f; // Convert to 0-1 range
-
-    // Convert dB to linear gain
-    float inputGain = juce::Decibels::decibelsToGain(inputGainDB);
-    float outputGain = juce::Decibels::decibelsToGain(outputGainDB);
-
-    // Map the single smoosh knob to compressor parameters
-    // Smoosh 0% = no compression, no effect
-    // Smoosh 60% = what was previously 100%
-    // Smoosh 60-100% = EXTRA aggressive "hammer" mode
-    float normalizedSmoosh = smooshAmount / 100.0f;
-
-    // Only process if smoosh is above 0.1%
-    bool compressionActive = smooshAmount > 0.1f;
-
-    // Determine if we're in "hammer" mode (60-100%)
-    bool hammerMode = smooshAmount > 60.0f;
-    float hammerAmount = hammerMode ? (smooshAmount - 60.0f) / 40.0f : 0.0f; // 0-1 for 60-100% range
-
-    // Remap 0-60% to be like old 0-100%
-    float remappedSmoosh = hammerMode ? 1.0f : (normalizedSmoosh / 0.6f);
-
-    // Threshold: starts very high at 0%, goes to -12 dB at 60%, then -6.4 dB at 100%
-    // (Reduced by ~20% for less aggressive compression)
-    float threshold;
-    if (hammerMode)
+    juce::ignoreUnused (midiMessages);
+    for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
+        buffer.clear (channel, 0, buffer.getNumSamples());
+    const auto meters = dsp.process (buffer, controls());
+    auto accumulate = [] (std::atomic<float>& destination, float value)
     {
-        // In hammer mode: go from -12 dB to -6.4 dB (lower threshold = more compression)
-        threshold = juce::jmap(hammerAmount, -12.0f, -6.4f);
-    }
-    else
-    {
-        // Normal mode: 0 to -12 dB with exponential curve
-        threshold = juce::jmap(remappedSmoosh * remappedSmoosh, 0.0f, -12.0f);
-    }
+        auto previous = destination.load (std::memory_order_relaxed);
+        while (previous < value && ! destination.compare_exchange_weak (previous, value, std::memory_order_relaxed)) {}
+    };
+    accumulate (meterLeft, meters.left);
+    accumulate (meterRight, meters.right);
+    accumulate (meterReduction, meters.reductionDB);
+    if (meters.clipped)
+        outputClipped.store (true, std::memory_order_relaxed);
+}
 
-    // Ratio: 1:1 at 0% → 10:1 at 60% → 16:1 at 100%
-    // (Reduced by ~20% for less aggressive compression)
-    float ratio;
-    if (hammerMode)
-    {
-        // In hammer mode: go from 10:1 to 16:1
-        ratio = juce::jmap(hammerAmount, 10.0f, 16.0f);
-    }
-    else
-    {
-        // Normal mode: 1:1 to 10:1
-        ratio = juce::jmap(remappedSmoosh, 1.0f, 10.0f);
-    }
-
-    // Attack: 10ms at 0% → 3ms at 60% → 1ms at 100% (super fast in hammer mode)
-    float attackMs;
-    if (hammerMode)
-    {
-        // In hammer mode: go from 3ms to 1ms (very fast)
-        attackMs = juce::jmap(hammerAmount, 3.0f, 1.0f);
-    }
-    else
-    {
-        // Normal mode: 10ms to 3ms
-        attackMs = juce::jmap(remappedSmoosh, 10.0f, 3.0f);
-    }
-
-    // Release: 100ms at 0% → 200ms at 60% → 150ms at 100% (slightly faster in hammer mode)
-    float releaseMs;
-    if (hammerMode)
-    {
-        // In hammer mode: go from 200ms to 150ms (faster release for punchiness)
-        releaseMs = juce::jmap(hammerAmount, 200.0f, 150.0f);
-    }
-    else
-    {
-        // Normal mode: 100ms to 200ms
-        releaseMs = juce::jmap(remappedSmoosh, 100.0f, 200.0f);
-    }
-
-    // Calculate attack and release coefficients
-    float attackCoeff = std::exp(-1.0f / (currentSampleRate * attackMs / 1000.0f));
-    float releaseCoeff = std::exp(-1.0f / (currentSampleRate * releaseMs / 1000.0f));
-
-    // Convert threshold to linear
-    float thresholdLinear = juce::Decibels::decibelsToGain(threshold);
-
-    // Makeup gain: 1.0 at 0% → 2.0 at 60% → 2.8 at 100%
-    // (Reduced by ~20% for less aggressive output)
-    float makeupGain;
-    if (hammerMode)
-    {
-        // In hammer mode: 2.0 to 2.8
-        makeupGain = juce::jmap(hammerAmount, 2.0f, 2.8f);
-    }
-    else
-    {
-        // Normal mode: 1.0 to 2.0 with smooth curve
-        makeupGain = 1.0f + (remappedSmoosh * remappedSmoosh * 1.0f);
-    }
-
-    // Saturation: keep it controlled to avoid harsh distortion
-    // 0 at 0% → 0.24 at 60% → 0.28 at 100%
-    // (Reduced by ~20% for less coloration)
-    float saturationAmount;
-    if (hammerMode)
-    {
-        saturationAmount = juce::jmap(hammerAmount, 0.24f, 0.28f);
-    }
-    else
-    {
-        saturationAmount = remappedSmoosh * 0.24f;
-    }
-
-    // Sibilance sensitivity
-    float sibilanceSensitivity = normalizedSmoosh;
-
-    // High-pass filter coefficient for sibilance detection
-    float hpFreq = juce::jmap(normalizedSmoosh, 2000.0f, 5000.0f);
-    float hpCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * hpFreq / static_cast<float>(currentSampleRate));
-
-    // Low-pass filter: more aggressive in hammer mode to prevent harshness
-    // Normal: 20kHz → 8kHz, Hammer: 8kHz → 6kHz
-    float lpFreq;
-    if (hammerMode)
-    {
-        lpFreq = juce::jmap(hammerAmount, 8000.0f, 6000.0f);
-    }
-    else
-    {
-        lpFreq = juce::jmap(remappedSmoosh, 20000.0f, 8000.0f);
-    }
-    float lpCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * lpFreq / static_cast<float>(currentSampleRate));
-
-    // Process each channel
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            // Store dry signal for wet/dry mixing
-            float drySample = channelData[sample];
-
-            // Apply input gain
-            float inputSample = channelData[sample] * inputGain;
-
-            float processedSample = inputSample;
-
-            if (compressionActive)
-            {
-                // Apply tube-style saturation (soft clipping with harmonic coloration)
-                if (saturationAmount > 0.001f)
-                {
-                    float saturated = inputSample * (1.0f + saturationAmount);
-                    // Soft clipping with tanh for tube-like saturation
-                    saturated = std::tanh(saturated * 1.5f) / 1.5f;
-                    // Blend between clean and saturated based on saturation amount
-                    processedSample = inputSample + (saturated - inputSample) * saturationAmount * 2.0f;
-                }
-
-                // Low-pass filter to reduce high-frequency harshness
-                lpState[channel] = processedSample * (1.0f - lpCoeff) + lpState[channel] * lpCoeff;
-                processedSample = lpState[channel];
-
-                // High-pass filter for sibilance detection (simple one-pole)
-                float hpSample = processedSample - hpState1[channel];
-                hpState1[channel] = processedSample * (1.0f - hpCoeff) + hpState1[channel] * hpCoeff;
-
-                // Second stage for steeper roll-off
-                float hpSample2 = hpSample - hpState2[channel];
-                hpState2[channel] = hpSample * (1.0f - hpCoeff) + hpState2[channel] * hpCoeff;
-
-                // Blend between full-spectrum and high-passed for sidechain detection
-                float detectionSample = processedSample + (hpSample2 - processedSample) * sibilanceSensitivity;
-
-                // Get absolute value for envelope detection
-                float inputLevel = std::abs(detectionSample);
-
-                // Envelope follower (peak detection)
-                if (inputLevel > envelope[channel])
-                    envelope[channel] = attackCoeff * envelope[channel] + (1.0f - attackCoeff) * inputLevel;
-                else
-                    envelope[channel] = releaseCoeff * envelope[channel] + (1.0f - releaseCoeff) * inputLevel;
-
-                // Calculate gain reduction
-                float gainReduction = 1.0f;
-                if (envelope[channel] > thresholdLinear)
-                {
-                    // Calculate how much we're over the threshold
-                    float overThresholdDB = juce::Decibels::gainToDecibels(envelope[channel] / thresholdLinear);
-
-                    // Apply ratio for compression
-                    float gainReductionDB = overThresholdDB * (1.0f - 1.0f / ratio);
-
-                    // Convert back to linear
-                    gainReduction = juce::Decibels::decibelsToGain(-gainReductionDB);
-                }
-
-                // Apply compression and makeup gain
-                processedSample = processedSample * gainReduction * makeupGain;
-
-                // Soft limiting to prevent harsh clipping in hammer mode
-                if (hammerMode)
-                {
-                    // Soft clip at ±0.95 to prevent hard clipping
-                    float limitThreshold = 0.95f;
-                    if (std::abs(processedSample) > limitThreshold)
-                    {
-                        float sign = processedSample > 0.0f ? 1.0f : -1.0f;
-                        float excess = std::abs(processedSample) - limitThreshold;
-                        // Soft knee limiting
-                        processedSample = sign * (limitThreshold + std::tanh(excess * 2.0f) * 0.05f);
-                    }
-                }
-            }
-
-            // Apply output gain to wet signal
-            float wetSample = processedSample * outputGain;
-
-            // Blend dry and wet signals based on mix amount
-            channelData[sample] = drySample * (1.0f - mixAmount) + wetSample * mixAmount;
-        }
-    }
+SmoosherDSP::MeterReadings SmoosherAudioProcessor::consumeMeters()
+{
+    return { meterLeft.exchange (0), meterRight.exchange (0), meterReduction.exchange (0), outputClipped.load() };
 }
 
 //==============================================================================
@@ -419,6 +216,11 @@ juce::AudioProcessorEditor* SmoosherAudioProcessor::createEditor()
 void SmoosherAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
+    const auto preset = getCurrentPreset();
+    state.setProperty ("presetName", preset.name, nullptr);
+    state.setProperty ("presetSmoosh", preset.smoosh, nullptr);
+    state.setProperty ("presetInput", preset.inputDB, nullptr);
+    state.setProperty ("presetOutput", preset.outputDB, nullptr);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
@@ -427,12 +229,144 @@ void SmoosherAudioProcessor::setStateInformation (const void* data, int sizeInBy
 {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
 
-    if (xmlState.get() != nullptr)
-        if (xmlState->hasTagName(apvts.state.getType()))
-            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+    if (xmlState == nullptr || ! xmlState->hasTagName (apvts.state.getType()))
+        return;
+    auto state = juce::ValueTree::fromXml (*xmlState);
+    apvts.replaceState (state);
+    Preset preset { state.getProperty ("presetName").toString(),
+                    static_cast<float> (state.getProperty ("presetSmoosh")),
+                    static_cast<float> (state.getProperty ("presetInput")),
+                    static_cast<float> (state.getProperty ("presetOutput")) };
+    if (! state.hasProperty ("presetSmoosh") || ! state.hasProperty ("presetInput")
+        || ! state.hasProperty ("presetOutput") || ! validPreset (preset))
+        preset = inferPreset();
+    const juce::ScopedLock lock (presetLock);
+    currentPreset = preset;
 }
 
 //==============================================================================
+const std::array<SmoosherAudioProcessor::Preset, 17>& SmoosherAudioProcessor::factoryPresets()
+{
+    static const std::array<Preset, 17> presets {{
+        { "Init", 0, 0, 0 }, { "Hell Smarsh", 45, 15, 1 },
+        { "Wenger's 7-String", 60, 10.5f, 2 }, { "That Joe Sound", 70, 15, 0 },
+        { "Gravy River", 70, 12, 2 }, { "Dani Time", 30, 30, 2 },
+        { "Gloopy", 40, 7.5f, 1 }, { "Limit THIS!", 75, 24, 3 },
+        { "Mr. Cetera", 24, 6, -3 },
+        { "Dockside Divorce", 38, 7.5f, -4.5f },
+        { "Drum Bus", 48, 6, -4 },
+        { "Bass in Boat Shoes", 42, 9, -5 },
+        { "Snare Custody Battle", 66, 12, -6 },
+        { "Oops! All Room Mics", 92, 24, -9 },
+        { "Live, Laugh, Limit", 85, 18, -7 },
+        { "Divorced Dad Clean Tone", 20, 4.5f, -3 },
+        { juce::String::fromUTF8 (u8"Hard Dick\u2122"), 73, 12, -5.5f }
+    }};
+    return presets;
+}
+
+bool SmoosherAudioProcessor::validPreset (const Preset& p)
+{
+    return p.name.isNotEmpty() && p.name.length() <= 64
+        && std::isfinite (p.smoosh) && p.smoosh >= 0 && p.smoosh <= 100
+        && std::isfinite (p.inputDB) && p.inputDB >= 0 && p.inputDB <= 30
+        && std::isfinite (p.outputDB) && p.outputDB >= -12 && p.outputDB <= 12;
+}
+
+void SmoosherAudioProcessor::loadPreset (const Preset& preset)
+{
+    if (! validPreset (preset))
+        return;
+    auto setParameter = [this] (const char* id, float value)
+    {
+        auto* parameter = apvts.getParameter (id);
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
+        parameter->endChangeGesture();
+    };
+    setParameter ("smoosh", preset.smoosh);
+    setParameter ("inputGain", preset.inputDB);
+    setParameter ("outputGain", preset.outputDB);
+    const juce::ScopedLock lock (presetLock);
+    currentPreset = preset;
+}
+
+SmoosherAudioProcessor::Preset SmoosherAudioProcessor::getCurrentPreset() const
+{
+    const juce::ScopedLock lock (presetLock);
+    return currentPreset;
+}
+
+bool SmoosherAudioProcessor::isPresetModified() const
+{
+    const auto p = getCurrentPreset();
+    const auto c = controls();
+    return std::abs (p.smoosh - c.smoosh) > 0.051f
+        || std::abs (p.inputDB - c.inputDB) > 0.051f
+        || std::abs (p.outputDB - c.outputDB) > 0.051f;
+}
+
+SmoosherAudioProcessor::Preset SmoosherAudioProcessor::inferPreset() const
+{
+    const auto c = controls();
+    for (const auto& p : factoryPresets())
+        if (std::abs (p.smoosh - c.smoosh) < 0.051f
+            && std::abs (p.inputDB - c.inputDB) < 0.051f
+            && std::abs (p.outputDB - c.outputDB) < 0.051f)
+            return p;
+    return { "Custom", c.smoosh, c.inputDB, c.outputDB };
+}
+
+juce::File SmoosherAudioProcessor::userPresetDirectory()
+{
+    auto directory = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
+   #if JUCE_MAC
+    directory = directory.getChildFile ("Application Support");
+   #endif
+    return directory.getChildFile ("Helvete Sound/Smoosher/Presets");
+}
+
+juce::Result SmoosherAudioProcessor::saveUserPreset (const juce::File& file, const juce::String& name)
+{
+    const auto c = controls();
+    Preset preset { name.trim(), c.smoosh, c.inputDB, c.outputDB };
+    if (! validPreset (preset))
+        return juce::Result::fail ("Enter a preset name of 1 to 64 characters.");
+    if (file.exists())
+        return juce::Result::fail ("A preset with that name already exists. Choose a new name.");
+    auto result = file.getParentDirectory().createDirectory();
+    if (result.failed())
+        return result;
+    juce::XmlElement xml ("SmoosherPreset");
+    xml.setAttribute ("version", 1);
+    xml.setAttribute ("name", preset.name);
+    xml.setAttribute ("smoosh", preset.smoosh);
+    xml.setAttribute ("input", preset.inputDB);
+    xml.setAttribute ("output", preset.outputDB);
+    juce::TemporaryFile temporary (file);
+    if (! xml.writeTo (temporary.getFile()) || ! temporary.overwriteTargetFileWithTemporary())
+        return juce::Result::fail ("The preset could not be saved to this folder.");
+    const juce::ScopedLock lock (presetLock);
+    currentPreset = preset;
+    return juce::Result::ok();
+}
+
+juce::Result SmoosherAudioProcessor::loadUserPreset (const juce::File& file)
+{
+    const auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr || ! xml->hasTagName ("SmoosherPreset") || xml->getIntAttribute ("version") != 1
+        || ! xml->hasAttribute ("smoosh") || ! xml->hasAttribute ("input") || ! xml->hasAttribute ("output"))
+        return juce::Result::fail ("This file is not a supported Smoosher preset.");
+    Preset preset { xml->getStringAttribute ("name"),
+                    static_cast<float> (xml->getDoubleAttribute ("smoosh")),
+                    static_cast<float> (xml->getDoubleAttribute ("input")),
+                    static_cast<float> (xml->getDoubleAttribute ("output")) };
+    if (! validPreset (preset))
+        return juce::Result::fail ("This preset contains invalid parameter values.");
+    loadPreset (preset);
+    return juce::Result::ok();
+}
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new SmoosherAudioProcessor();

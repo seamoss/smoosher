@@ -1,340 +1,174 @@
 # Smoosher
 
-A free audio compressor plugin with character. Smoosher combines aggressive compression, tube-style saturation, and intelligent sibilance detection into a simple, intuitive interface.
+A free audio compressor plugin with character, by Helvete Sound, LLC. One Smoosh knob combines compression, saturation, and frequency-sensitive detection.
 
-<img width="500" height="259" alt="Screenshot 2025-10-17 at 16 18 59" src="https://github.com/user-attachments/assets/b107ea45-8ebb-4a42-b06b-9a3aa54103de" />
+Version **1.1.0** adds gain-reduction and stereo output meters, rounded editable value boxes, smooth control changes, user presets, and nine new factory presets. The one-knob compression curves and plugin/parameter identifiers are retained.
 
-## Features
+## Controls
 
-### Core Processing
-- **Single "Smoosh" Control**: One knob controls threshold, ratio, attack, release, makeup gain, and saturation
-  - 0-60%: Gentle to moderate compression
-  - 60-100%: "Hammer Mode" - extreme, aggressive compression with fast attack
-- **Input Gain**: 0 to +30 dB drive stage
-- **Output Gain**: -12 to +12 dB output trim
-- **Mix Control**: 0-100% wet/dry blend for parallel processing
+- **Smoosh, 0–100%:** controls compression threshold, ratio, attack, release, makeup gain, saturation, and filtering. Above 60%, Hammer mode adds faster attack and soft clipping.
+- **Input, 0 to +30 dB:** drives the wet processing path.
+- **Output, −12 to +12 dB:** trims the wet output after compression and soft clipping. This is not a final output ceiling; positive gain can produce peaks above 0 dBFS.
+- **Mix, 0–100%:** blends the original dry input with the processed wet signal. Preset changes leave Mix alone.
 
-### Signal Processing
-- Adaptive compression with musical attack/release curves
-- Tube-style soft-clipping saturation using hyperbolic tangent
-- Intelligent sibilance detection with high-pass sidechain
-- Adaptive low-pass filtering to reduce high-frequency harshness
-- Soft limiting in hammer mode to prevent hard clipping
+The interface is 620 × 470 pixels, with a compact Mix knob below the meters. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final dry/wet output with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
 
-### UI Features
-- Compact, clean interface (500x260px)
-- Color-gradient knobs (green to red) for visual feedback
-- 7 factory presets plus Init preset:
-  - **Hell Smarsh**: Balanced warmth (45% smoosh, 15dB input, +1dB gain)
-  - **Wenger's 7-String**: Modern tightness (60% smoosh, 10.5dB input, +2dB gain)
-  - **That Joe Sound**: Natural dynamics (70% smoosh, 15dB input, 0dB gain)
-  - **Gravy River**: Rich and smooth (70% smoosh, 12dB input, +2dB gain)
-  - **Dani Time**: Subtle enhancement (30% smoosh, 35dB input, +2dB gain)
-  - **Gloopy**: Warm and vintage (40% smoosh, 7.5dB input, +1dB gain)
-  - **Limit THIS!**: Maximum aggression (75% smoosh, 24dB input, +3dB gain)
-- Mouse wheel parameter control
-- Mix control independent of presets
+Sixteen factory presets plus Init are included. The original seven:
+
+| Preset | Smoosh | Input | Output |
+| --- | --- | --- | --- |
+| Hell Smarsh | 45% | +15 dB | +1 dB |
+| Wenger's 7-String | 60% | +10.5 dB | +2 dB |
+| That Joe Sound | 70% | +15 dB | 0 dB |
+| Gravy River | 70% | +12 dB | +2 dB |
+| Dani Time | 30% | +30 dB | +2 dB |
+| Gloopy | 40% | +7.5 dB | +1 dB |
+| Limit THIS! | 75% | +24 dB | +3 dB |
+
+The 1.1 collection adds nine more starting points, from yacht rock to questionable life choices:
+
+| Preset | Intended starting point | Smoosh | Input | Output |
+| --- | --- | --- | --- | --- |
+| Mr. Cetera | Gentle vocal/key polish. The marina needs a power ballad. | 24% | +6 dB | −3 dB |
+| Dockside Divorce | More colour for a yacht-rock instrument bus. She got the boat. | 38% | +7.5 dB | −4.5 dB |
+| Drum Bus | General drum-bus cohesion with moderate drive. A responsible adult. | 48% | +6 dB | −4 dB |
+| Bass in Boat Shoes | Bass sustain for financially secure low end. | 42% | +9 dB | −5 dB |
+| Snare Custody Battle | Hammer-mode snare attitude. Every other weekend is a fill. | 66% | +12 dB | −6 dB |
+| Oops! All Room Mics | Heavy room-mic smash. The ceiling is now a band member. | 92% | +24 dB | −9 dB |
+| Live, Laugh, Limit | Aggressive Hammer colour for parallel destruction. Hang it in the kitchen. | 85% | +18 dB | −7 dB |
+| Divorced Dad Clean Tone | Light clean-guitar control. The chorus pedal is sold separately. | 20% | +4.5 dB | −3 dB |
+| Hard Dick™ | '90s hair-metal guitar-bus sustain and Hammer-mode attitude. Spandex sold separately. | 73% | +12 dB | −5.5 dB |
+
+Adjust Input for the source level and Output to level-match. These presets use the same processing as every other setting; their names describe starting points, not additional effects. Mix stays where you left it, so blend the heavier settings to taste.
+
+Preset names and their original settings are saved with the session. An asterisk and MODIFIED label indicate edits to Input, Smoosh, or Output; changing Mix does not modify a preset. Older sessions without preset metadata infer a matching factory name or display Custom.
+
+Use **Save...** to store a named user preset. User presets preserve Input, Smoosh, and Output, and leave Mix unchanged. They are saved in `~/Library/Application Support/Helvete Sound/Smoosher/Presets/` on macOS or `%APPDATA%/Helvete Sound/Smoosher/Presets/` on Windows. Existing preset files are not overwritten. Dani Time now stores +30 dB explicitly, matching the supported input range.
 
 ## Installation
 
+Download published assets from [GitHub Releases](https://github.com/seamoss/smoosher/releases). The release workflow prepares the assets below as a draft; they become public when the maintainer publishes the release. Older 1.0.0 downloads use the original ZIP/manual installation process.
+
 ### macOS
-1. Download the latest release
-2. Extract the zip file
-3. Copy the plugin to the appropriate folder:
-   - **AU**: `~/Library/Audio/Plug-Ins/Components/`
-   - **VST3**: `~/Library/Audio/Plug-Ins/VST3/`
-4. Rescan plugins in your DAW
+
+The release build targets **macOS 11 or later**, with both **Apple Silicon and Intel** code in each plugin. Hosted CI validates on macOS 15; the minimum OS target is not a claim that every OS/DAW combination has been tested.
+
+1. Close your DAW and download `Smoosher-1.1.0-macOS-universal.pkg` from the published release.
+2. Open the signed, notarized installer and follow the prompts. Administrator authorization is required because it installs for all users:
+   - AU: `/Library/Audio/Plug-Ins/Components/Smoosher.component`
+   - VST3: `/Library/Audio/Plug-Ins/VST3/Smoosher.vst3`
+3. If upgrading from a manual installation, move old Smoosher copies out of `~/Library/Audio/Plug-Ins/Components/` and `~/Library/Audio/Plug-Ins/VST3/` to avoid duplicate versions. The installer does not remove per-user copies.
+4. Open your DAW and rescan plugins if necessary.
+
+The installer contains AU and VST3. The standalone app is available when building from source. Unsigned Actions artifacts are development builds, not the notarized release installer.
 
 ### Windows
-1. Download the latest release
-2. Extract the zip file
-3. Copy `Smoosher.vst3` to:
-   - `C:\Program Files\Common Files\VST3\`
-4. Rescan plugins in your DAW
 
-## Building from Source
+1. Close your DAW and download `Smoosher-1.1.0-Windows.zip` from the published release.
+2. Extract it and copy the entire `VST3/Smoosher.vst3` bundle into `C:\Program Files\Common Files\VST3\`. Administrator authorization may be required.
+3. Open your DAW and rescan plugins if necessary.
 
-### Prerequisites
-- CMake 3.15 or higher
-- C++ compiler with C++17 support
-  - macOS: Xcode Command Line Tools
-  - Windows: Visual Studio 2019 or higher
-  - Linux: GCC 7+ or Clang 6+
-- Git
+The Windows release is x64 VST3. Apple signing and notarization apply only to the Mac release; the Windows ZIP is unsigned.
 
-### Build Instructions
+Each release includes `SHA256SUMS.txt` for verifying the downloaded files.
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/smoosher.git
+## Building from source
+
+Requirements: Git, **CMake 3.22 or later**, and a C++17 compiler. The release uses **Xcode 16.4** on macOS, or Visual Studio 2022 with the Desktop development with C++ workload on Windows. CMake downloads the pinned JUCE **8.0.4** dependency during configuration. Newer Xcode releases may raise the minimum deployment target; use the release toolchain when reproducing its macOS 11 target.
+
+```sh
+git clone https://github.com/seamoss/smoosher.git
 cd smoosher
 ```
 
-2. Create build directory:
-```bash
-mkdir build
-cd build
+### macOS universal AU and VST3
+
+```sh
+export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
+cmake -S . -B build -G Xcode \
+  '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build --config Release --target Smoosher_AU Smoosher_VST3 --parallel 3
+bash scripts/verify-macos.sh build/Smoosher_artefacts/Release
 ```
 
-3. Configure with CMake:
-```bash
-cmake ..
+Outputs:
+
+- `build/Smoosher_artefacts/Release/AU/Smoosher.component`
+- `build/Smoosher_artefacts/Release/VST3/Smoosher.vst3`
+
+Build the optional standalone app with `cmake --build build --config Release --target Smoosher_Standalone`. It is written to `build/Smoosher_artefacts/Release/Standalone/Smoosher.app`.
+
+For local testing, close your DAW and explicitly install the plugins into your user directories. These commands replace any existing Smoosher copies at those destinations and refresh your user's Audio Unit registrar:
+
+```sh
+mkdir -p "$HOME/Library/Audio/Plug-Ins/Components" "$HOME/Library/Audio/Plug-Ins/VST3"
+codesign --force --sign - build/Smoosher_artefacts/Release/AU/Smoosher.component
+ditto build/Smoosher_artefacts/Release/AU/Smoosher.component "$HOME/Library/Audio/Plug-Ins/Components/Smoosher.component"
+ditto build/Smoosher_artefacts/Release/VST3/Smoosher.vst3 "$HOME/Library/Audio/Plug-Ins/VST3/Smoosher.vst3"
+killall -9 -u "$(id -un)" AudioComponentRegistrar 2>/dev/null || true
+sleep 2
+auval -v aufx Smsh Smsh
 ```
 
-4. Build:
-```bash
-# Release build
-cmake --build . --config Release
+Local builds are not Developer ID signed or notarized. See [the release guide](docs/RELEASING.md) for distribution signing.
 
-# Debug build (for development)
-cmake --build . --config Debug
-```
+### Windows VST3
 
-5. The compiled plugins will be in:
-   - `build/Smoosher_artefacts/AU/` (macOS only)
-   - `build/Smoosher_artefacts/VST3/`
-   - `build/Smoosher_artefacts/Standalone/`
-
-### Installing Built Plugins
-
-macOS:
-```bash
-# AU
-cp -r build/Smoosher_artefacts/AU/Smoosher.component ~/Library/Audio/Plug-Ins/Components/
-
-# VST3
-cp -r build/Smoosher_artefacts/VST3/Smoosher.vst3 ~/Library/Audio/Plug-Ins/VST3/
-```
-
-Windows:
 ```powershell
-# VST3
-copy build\Smoosher_artefacts\VST3\Smoosher.vst3 "C:\Program Files\Common Files\VST3\"
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release --target Smoosher_VST3 --parallel 4
 ```
 
-## Customization
+The bundle is `build/Smoosher_artefacts/Release/VST3/Smoosher.vst3`. To install it from an elevated PowerShell:
 
-### Adding/Modifying Presets
-
-Presets are defined in `Source/PluginEditor.cpp` in the `setupPresets()` function:
-
-```cpp
-void SmoosherAudioProcessorEditor::setupPresets()
-{
-    // Format: {"Name", Smoosh %, Input dB (0-30), Output/Gain dB (-12 to +12)}
-    factoryPresets.push_back({"Preset Name", 50.0f, 12.0f, 0.0f});
-    // Add more presets here...
-}
+```powershell
+Copy-Item -Recurse -Force build\Smoosher_artefacts\Release\VST3\Smoosher.vst3 'C:\Program Files\Common Files\VST3\'
 ```
 
-**Preset Parameters:**
-- **Name**: String (appears in dropdown)
-- **Smoosh**: 0.0 to 100.0 (compression amount)
-- **Input**: 0.0 to 30.0 (input gain in dB)
-- **Output/Gain**: -12.0 to 12.0 (output gain in dB)
+Builds do not install plugins automatically. Developers can opt in with `-DSMOOSHER_COPY_PLUGIN_AFTER_BUILD=ON`; leave it off for packaging and CI. For Debug, use `--config Debug` and the corresponding `Debug` output directory. The paths above use multi-configuration generators; other generators may use a different artifact layout.
 
-### Adjusting Default Parameter Values
+## Development and validation
 
-Default values are set in `Source/PluginProcessor.cpp` in the `createParameterLayout()` function:
+Pull requests and main/master pushes build macOS AU/VST3 and Windows VST3 without release credentials. CI checks both Mac architectures, bundle versions, and AU validation. Version tags additionally sign and notarize the installer, verify it with Gatekeeper, and create a draft GitHub release after all jobs pass. See [RELEASING.md](docs/RELEASING.md) for setup and the release checklist.
 
-```cpp
-// Smoosh default (4th parameter)
-layout.add(std::make_unique<juce::AudioParameterFloat>(
-    "smoosh", "Smoosh",
-    juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-    0.0f,  // <- Change this value (0-100)
-    // ...
-));
+To run processor regression checks (unity/dry routing, meter and clip behavior, smoothing across block sizes, sample rates, session recall, and user presets):
 
-// Input Gain default
-layout.add(std::make_unique<juce::AudioParameterFloat>(
-    "inputGain", "Input",
-    juce::NormalisableRange<float>(0.0f, 30.0f, 0.1f),
-    0.0f,  // <- Change this value (0-30)
-    // ...
-));
-
-// Output Gain default
-layout.add(std::make_unique<juce::AudioParameterFloat>(
-    "outputGain", "Output",
-    juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
-    0.0f,  // <- Change this value (-12 to +12)
-    // ...
-));
-
-// Mix default
-layout.add(std::make_unique<juce::AudioParameterFloat>(
-    "mix", "Mix",
-    juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-    100.0f,  // <- Change this value (0-100, 100 = fully wet)
-    // ...
-));
+```sh
+cmake -S . -B build -DSMOOSHER_BUILD_TESTS=ON
+cmake --build build --config Release --target SmoosherTests
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-### Adjusting Compression Algorithm
+For additional host compatibility testing, [pluginval](https://github.com/Tracktion/pluginval) supports AU/VST3 validation on macOS and VST3 on Windows:
 
-The compression behavior is defined in `Source/PluginProcessor.cpp` in the `processBlock()` function:
-
-**Threshold Curve** (line ~206-218):
-```cpp
-// Normal mode: 0 to -12 dB
-threshold = juce::jmap(remappedSmoosh * remappedSmoosh, 0.0f, -12.0f);
-
-// Hammer mode: -12 dB to -6.4 dB
-threshold = juce::jmap(hammerAmount, -12.0f, -6.4f);
+```sh
+/path/to/pluginval --strictness-level 5 --validate /path/to/Smoosher.vst3
 ```
 
-**Compression Ratio** (line ~220-232):
-```cpp
-// Normal mode: 1:1 to 10:1
-ratio = juce::jmap(remappedSmoosh, 1.0f, 10.0f);
+DAW loading, session recall, and listening checks remain part of release verification. No Linux binary or AAX plugin is distributed by this workflow.
 
-// Hammer mode: 10:1 to 16:1
-ratio = juce::jmap(hammerAmount, 10.0f, 16.0f);
-```
+Run release-script tests with `python3 -m unittest discover -s tests -v`. They check version mismatches, missing credentials, notarization rejection/timeouts, success verification, and keychain cleanup using mocked external services; they do not contact Apple or access signing keys.
 
-**Attack Time** (line ~234-245):
-```cpp
-// Normal mode: 10ms to 3ms
-attackMs = juce::jmap(remappedSmoosh, 10.0f, 3.0f);
+## Implementation
 
-// Hammer mode: 3ms to 1ms
-attackMs = juce::jmap(hammerAmount, 3.0f, 1.0f);
-```
+- `Source/PluginProcessor.cpp`: parameters, metering handoff, preset management, and state serialization.
+- `Source/SmoosherDSP.h`: compression, saturation, smoothing, and audio measurements.
+- `Source/PluginEditor.cpp`: controls, meters, and preset UI. Factory presets live in `SmoosherAudioProcessor::factoryPresets()`.
+- `CMakeLists.txt`: version, stable plugin identifiers, formats, and JUCE dependency.
+- `.github/workflows/build.yml`: CI and draft releases.
+- `scripts/`: version checking, universal-binary verification, packaging, and notarization.
 
-**Release Time** (line ~247-258):
-```cpp
-// Normal mode: 100ms to 200ms
-releaseMs = juce::jmap(remappedSmoosh, 100.0f, 200.0f);
+The wet signal path is input gain → tanh saturation → low-pass filtering → compression with frequency-sensitive detection → makeup gain → Hammer soft clipping → output gain. The result is blended with the original dry input. Channels have independent compressor envelopes.
 
-// Hammer mode: 200ms to 150ms
-releaseMs = juce::jmap(hammerAmount, 200.0f, 150.0f);
-```
-
-**Makeup Gain** (line ~267-279):
-```cpp
-// Normal mode: 1.0 to 2.0
-makeupGain = 1.0f + (remappedSmoosh * remappedSmoosh * 1.0f);
-
-// Hammer mode: 2.0 to 2.8
-makeupGain = juce::jmap(hammerAmount, 2.0f, 2.8f);
-```
-
-**Saturation Amount** (line ~281-292):
-```cpp
-// Normal mode: 0 to 0.24
-saturationAmount = remappedSmoosh * 0.24f;
-
-// Hammer mode: 0.24 to 0.28
-saturationAmount = juce::jmap(hammerAmount, 0.24f, 0.28f);
-```
-
-### Customizing the UI
-
-**Window Size** - `Source/PluginEditor.cpp` line 56:
-```cpp
-setSize (500, 260);  // Width, Height
-```
-
-**Control Sizes** - `Source/PluginEditor.cpp` in `resized()` function:
-```cpp
-// Input/Output knobs (line ~201, 213)
-auto inputSliderBounds = inputArea.withSizeKeepingCentre(110, 110);
-auto outputSliderBounds = outputArea.withSizeKeepingCentre(110, 110);
-
-// Smoosh knob (line ~207)
-auto smooshSliderBounds = smooshArea.withSizeKeepingCentre(140, 140);
-
-// Mix knob (line ~219)
-auto mixSliderBounds = mixArea.withSizeKeepingCentre(48, 48);
-```
-
-**Color Gradient** - `Source/PluginEditor.cpp` line 19-24:
-```cpp
-juce::Colour fillColour = juce::Colour::fromHSV(
-    juce::jmap(sliderPos, 0.33f, 0.0f),  // Hue: 0.33 (green) to 0.0 (red)
-    0.8f,  // Saturation
-    0.7f,  // Brightness
-    1.0f   // Alpha
-);
-```
-
-## Technical Details
-
-### Built With
-- [JUCE Framework 8.0.4](https://juce.com/) - Cross-platform audio plugin framework
-- CMake - Build system
-
-### Supported Formats
-- AU (Audio Units) - macOS only
-- VST3 - macOS, Windows, Linux
-- AAX - Coming soon (pending Avid developer approval)
-
-### DSP Overview
-1. Input gain stage
-2. Tube-style saturation (tanh soft clipping)
-3. Adaptive low-pass filtering
-4. Sibilance-sensitive envelope detection
-5. Dynamic compression with musical curves
-6. Soft limiting (hammer mode only)
-7. Makeup gain
-8. Output gain
-9. Wet/dry mixing
-
-### Project Structure
-```
-Smoosher/
-├── Source/
-│   ├── PluginProcessor.h      # Audio processor declaration
-│   ├── PluginProcessor.cpp    # DSP implementation
-│   ├── PluginEditor.h         # UI declaration
-│   └── PluginEditor.cpp       # UI implementation
-├── CMakeLists.txt             # Build configuration
-└── README.md                  # This file
-```
-
-## Development
-
-### Running Tests
-After building, you can test the plugin:
-
-**Standalone App:**
-```bash
-open build/Smoosher_artefacts/Standalone/Smoosher.app  # macOS
-```
-
-**Audio Unit Validation (macOS):**
-```bash
-auval -v aufx Smsh YrCm  # Validate AU plugin
-```
-
-### Code Style
-- C++17 standard
-- JUCE coding conventions
-- Comments for complex DSP sections
-
-## Usage Tips
-
-1. **Start Simple**: Begin with a preset that matches your source material
-2. **Parallel Processing**: Use the Mix control to blend compressed and dry signals for "New York" style compression
-3. **Drive It**: Push the Input gain to add saturation character before compression
-4. **Hammer Mode**: Beyond 60% Smoosh for aggressive, limiting-style compression
-5. **Match Levels**: Use Output gain to match bypassed levels, or add extra punch
+Keep the existing bundle ID, manufacturer/plugin codes, and parameter IDs stable so DAWs can identify the plugin in existing sessions. The 1.1 update preserves the steady-state compression curves; parameter transitions are intentionally smoothed. Stereo linking and oversampling are not included.
 
 ## License
 
 This project is free and open source. Feel free to use, modify, and distribute.
 
-## Credits
+## Credits and support
 
-Built as a need by Seánan McCullough, Helvete Sound, LLC, Portland, OR - https://helvetesound.com
+Built by Seánan McCullough, Helvete Sound, LLC, Portland, OR — [helvetesound.com](https://helvetesound.com). Built with [JUCE](https://juce.com/).
 
-Built with JUCE Framework by Roli Ltd.
-
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
-
----
-
-**Note:** This plugin is provided as-is with no warranty. Always test thoroughly before using in production.
+Report bugs and feature requests in [GitHub Issues](https://github.com/seamoss/smoosher/issues).

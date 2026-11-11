@@ -3,83 +3,45 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-//==============================================================================
-// Custom LookAndFeel for gradient sliders (green to red)
-class GradientSliderLookAndFeel : public juce::LookAndFeel_V4
+class SmoosherLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                          float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-                          juce::Slider& slider) override;
+    SmoosherLookAndFeel();
+    void drawRotarySlider (juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
+    juce::Label* createSliderTextBox (juce::Slider&) override;
+    void drawLabel (juce::Graphics&, juce::Label&) override;
+    void fillTextEditorBackground (juce::Graphics&, int, int, juce::TextEditor&) override;
+    void drawTextEditorOutline (juce::Graphics&, int, int, juce::TextEditor&) override;
 };
 
-// Custom LookAndFeel for smaller ComboBox font
-class SmallComboBoxLookAndFeel : public juce::LookAndFeel_V4
+class SmoosherAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    juce::Font getComboBoxFont (juce::ComboBox&) override
-    {
-        return juce::Font(11.0f);
-    }
-
-    juce::Font getPopupMenuFont() override
-    {
-        return juce::Font(11.0f);
-    }
-};
-
-//==============================================================================
-class SmoosherAudioProcessorEditor  : public juce::AudioProcessorEditor
-{
-public:
-    SmoosherAudioProcessorEditor (SmoosherAudioProcessor&);
+    explicit SmoosherAudioProcessorEditor (SmoosherAudioProcessor&);
     ~SmoosherAudioProcessorEditor() override;
-
-    //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
     SmoosherAudioProcessor& audioProcessor;
-
-    // Sliders
-    juce::Slider smooshSlider;
-    juce::Slider inputGainSlider;
-    juce::Slider outputGainSlider;
-    juce::Slider mixSlider;
-
-    // Labels
-    juce::Label smooshLabel;
-    juce::Label inputGainLabel;
-    juce::Label outputGainLabel;
-    juce::Label mixLabel;
-
-    // Preset selector
+    SmoosherLookAndFeel lookAndFeel;
+    juce::Slider smooshSlider, inputGainSlider, outputGainSlider, mixSlider;
+    juce::Label smooshLabel, inputGainLabel, outputGainLabel, mixLabel, modifiedLabel;
     juce::ComboBox presetComboBox;
-    juce::Label presetLabel;
+    juce::TextButton saveButton { "Save..." }, clipButton { "PEAK" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> smooshAttachment, inputGainAttachment, outputGainAttachment, mixAttachment;
+    juce::Array<juce::File> userPresets;
+    juce::TooltipWindow tooltips { this, 600 };
+    float displayedLeft = 0, displayedRight = 0, displayedReduction = 0;
+    float heldPeak = -100.0f;
+    double peakHoldUntil = 0, lastMeterTime = 0;
+    bool clipVisible = false;
 
-    // Attachments
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> smooshAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputGainAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
-
-    // Custom LookAndFeel
-    GradientSliderLookAndFeel gradientLookAndFeel;
-    SmallComboBoxLookAndFeel comboBoxLookAndFeel;
-
-    // Preset management
-    struct Preset
-    {
-        juce::String name;
-        float smoosh;
-        float inputGain;
-        float outputGain;
-    };
-
-    std::vector<Preset> factoryPresets;
-    void loadPreset(int presetIndex);
-    void setupPresets();
-
+    void timerCallback() override;
+    void refreshPresetList();
+    void updatePresetDisplay();
+    void savePreset();
+    void configureKnob (juce::Slider&, juce::Label&, const juce::String&, const juce::String&);
+    void drawMeters (juce::Graphics&);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmoosherAudioProcessorEditor)
 };
