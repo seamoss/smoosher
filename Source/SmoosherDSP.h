@@ -9,13 +9,14 @@
 class SmoosherDSP
 {
 public:
-    struct Controls { float smoosh, inputDB, outputDB, mix; };
+    struct Controls { float smoosh, inputDB, outputDB, mix; float stereoLink = 0, detectorHPF = 0; };
     struct MeterReadings { float left = 0, right = 0, reductionDB = 0; bool clipped = false; };
 
     void prepare (double rate, Controls controls)
     {
         sampleRate = rate;
         envelope.fill (0); hp1.fill (0); hp2.fill (0); lp.fill (0);
+        detectorState1.fill (0); detectorState2.fill (0);
         const auto values = targets (controls);
         for (size_t i = 0; i < smooth.size(); ++i)
         {
@@ -43,6 +44,9 @@ public:
             for (size_t i = 0; i < smooth.size(); ++i)
                 v[i] = smooth[i].getNextValue();
 
+            std::array<float, 2> preGain {}, reductions {};
+            // Detect both channels before applying any reduction. Linking uses
+            // the larger reduction, never a summed waveform that could cancel.
             for (int channel = 0; channel < channels; ++channel)
             {
                 const auto c = static_cast<size_t> (channel);
@@ -65,14 +69,41 @@ public:
                     hp1[c] = processed * (1.0f - v[highpass]) + hp1[c] * v[highpass];
                     const auto high2 = high - hp2[c];
                     hp2[c] = high * (1.0f - v[highpass]) + hp2[c] * v[highpass];
-                    const auto detector = processed + (high2 - processed) * v[sibilance];
+                    auto detector = processed + (high2 - processed) * v[sibilance];
+                    // Two TPT high-pass stages affect only the detector. Keep
+                    // their state warm while bypassed, then crossfade on/off.
+                    const auto highPass = [&v] (float value, float& state)
+                    {
+                        const auto delta = (value - state) * v[detectorCoefficient];
+                        const auto low = delta + state;
+                        state = low + delta;
+                        return value - low;
+                    };
+                    const auto filtered = highPass (highPass (detector, detectorState1[c]), detectorState2[c]);
+                    if (v[detectorBlend] > 0.0f)
+                        detector += (filtered - detector) * v[detectorBlend];
                     const auto level = std::abs (detector);
                     const auto coefficient = level > envelope[c] ? v[attack] : v[release];
                     envelope[c] = coefficient * envelope[c] + (1.0f - coefficient) * level;
 
-                    float reduction = 0.0f;
                     if (envelope[c] > v[threshold])
-                        reduction = juce::Decibels::gainToDecibels (envelope[c] / v[threshold]) * v[ratioFactor];
+                        reductions[c] = juce::Decibels::gainToDecibels (envelope[c] / v[threshold]) * v[ratioFactor];
+                }
+                preGain[c] = processed;
+            }
+
+            const auto sharedReduction = juce::jmax (reductions[0], reductions[1]);
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                const auto c = static_cast<size_t> (channel);
+                const auto dry = data[channel][sample];
+                const auto input = dry * v[inputGain];
+                auto processed = preGain[c];
+                if (v[active] > 0.0f)
+                {
+                    auto reduction = reductions[c];
+                    if (channels == 2 && v[link] > 0.0f)
+                        reduction = v[link] >= 1.0f ? sharedReduction : reduction + (sharedReduction - reduction) * v[link];
                     meters.reductionDB = juce::jmax (meters.reductionDB, reduction * v[active]);
                     processed = processed * juce::Decibels::decibelsToGain (-reduction) * v[makeup];
 
@@ -104,9 +135,11 @@ public:
 
 private:
     enum Setting { inputGain, outputGain, blend, threshold, ratioFactor, attack, release,
-                   makeup, saturation, sibilance, highpass, lowpass, active, hammer, count };
+                   makeup, saturation, sibilance, highpass, lowpass, active, hammer,
+                   link, detectorCoefficient, detectorBlend, count };
     std::array<juce::SmoothedValue<float>, count> smooth;
     std::array<float, 2> envelope {}, hp1 {}, hp2 {}, lp {};
+    std::array<float, 2> detectorState1 {}, detectorState2 {};
     double sampleRate = 44100.0;
 
     std::array<float, count> targets (Controls c) const
@@ -122,6 +155,8 @@ private:
         const auto releaseMS = isHammer ? juce::jmap (hammerAmount, 200.0f, 150.0f) : juce::jmap (remapped, 100.0f, 200.0f);
         const auto lpFrequency = isHammer ? juce::jmap (hammerAmount, 8000.0f, 6000.0f)
                                           : juce::jmap (remapped, 20000.0f, 8000.0f);
+        const auto detectorFrequency = juce::jmin (juce::jmax (20.0f, c.detectorHPF), static_cast<float> (sampleRate * 0.45));
+        const auto detectorG = std::tan (juce::MathConstants<float>::pi * detectorFrequency / static_cast<float> (sampleRate));
         return {
             juce::Decibels::decibelsToGain (c.inputDB),
             juce::Decibels::decibelsToGain (c.outputDB),
@@ -136,7 +171,10 @@ private:
             std::exp (-2.0f * juce::MathConstants<float>::pi * juce::jmap (normal, 2000.0f, 5000.0f) / static_cast<float> (sampleRate)),
             std::exp (-2.0f * juce::MathConstants<float>::pi * lpFrequency / static_cast<float> (sampleRate)),
             c.smoosh > 0.1f ? 1.0f : 0.0f,
-            isHammer ? 1.0f : 0.0f
+            isHammer ? 1.0f : 0.0f,
+            juce::jlimit (0.0f, 1.0f, c.stereoLink / 100.0f),
+            detectorG / (1.0f + detectorG),
+            c.detectorHPF >= 20.0f ? 1.0f : 0.0f
         };
     }
 };

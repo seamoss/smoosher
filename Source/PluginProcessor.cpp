@@ -19,7 +19,9 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
     inputParameter = apvts.getRawParameterValue ("inputGain");
     outputParameter = apvts.getRawParameterValue ("outputGain");
     mixParameter = apvts.getRawParameterValue ("mix");
-    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix" })
+    linkParameter = apvts.getRawParameterValue ("stereoLink");
+    detectorParameter = apvts.getRawParameterValue ("detectorHPF");
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF" })
         apvts.addParameterListener (id, this);
     startTimerHz (10);
 }
@@ -27,7 +29,7 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
 SmoosherAudioProcessor::~SmoosherAudioProcessor()
 {
     stopTimer();
-    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix" })
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF" })
         apvts.removeParameterListener (id, this);
 }
 
@@ -80,6 +82,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoosherAudioProcessor::crea
         [](float value, int) { return juce::String(value, 1) + "%"; }
     ));
 
+    // Append new IDs; the original four remain unchanged for existing automation.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "stereoLink", 2 }, "Couples Therapy",
+        juce::NormalisableRange<float> (0, 100, 0.1f), 0, juce::String(),
+        juce::AudioProcessorParameter::genericParameter,
+        [] (float value, int) { return juce::String (value, 1) + "%"; }));
+    const juce::NormalisableRange<float> cutoffRange (0.0f, 300.0f,
+        [] (float start, float end, float value) { return start + (end - start) * value; },
+        [] (float start, float end, float value) { return (value - start) / (end - start); },
+        [] (float, float end, float value) { return value < 10.0f ? 0.0f : juce::jlimit (20.0f, end, std::round (value)); });
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "detectorHPF", 2 }, "Kick Privilege", cutoffRange, 0, juce::String(),
+        juce::AudioProcessorParameter::genericParameter,
+        [] (float value, int) { return value < 20.0f ? juce::String ("Off") : juce::String (value, 0) + " Hz"; }));
     return layout;
 }
 
@@ -181,7 +197,8 @@ bool SmoosherAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts)
 
 SmoosherDSP::Controls SmoosherAudioProcessor::controls() const
 {
-    return { smooshParameter->load(), inputParameter->load(), outputParameter->load(), mixParameter->load() };
+    return { smooshParameter->load(), inputParameter->load(), outputParameter->load(), mixParameter->load(),
+             linkParameter->load(), detectorParameter->load() };
 }
 
 void SmoosherAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -229,6 +246,8 @@ void SmoosherAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("presetSmoosh", preset.smoosh, nullptr);
     state.setProperty ("presetInput", preset.inputDB, nullptr);
     state.setProperty ("presetOutput", preset.outputDB, nullptr);
+    state.setProperty ("presetLink", preset.stereoLink, nullptr);
+    state.setProperty ("presetHPF", preset.detectorHPF, nullptr);
     writeMoreTrouble (state);
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
@@ -241,11 +260,30 @@ void SmoosherAudioProcessor::setStateInformation (const void* data, int sizeInBy
     if (xmlState == nullptr || ! xmlState->hasTagName (apvts.state.getType()))
         return;
     auto state = juce::ValueTree::fromXml (*xmlState);
+    // replaceState retains a parameter's live value if its node is absent.
+    // Explicit defaults are essential when loading an older session into an
+    // instance that has already used the new shaping controls.
+    for (const auto* id : { "stereoLink", "detectorHPF" })
+    {
+        if (! state.getChildWithProperty ("id", id).isValid())
+        {
+            juce::ValueTree parameter ("PARAM");
+            parameter.setProperty ("id", id, nullptr);
+            parameter.setProperty ("value", 0.0f, nullptr);
+            state.appendChild (parameter, nullptr);
+        }
+        auto parameter = state.getChildWithProperty ("id", id);
+        const auto value = static_cast<float> (parameter.getProperty ("value"));
+        if (! (juce::String (id) == "stereoLink" ? validShape (value, 0) : validShape (0, value)))
+            parameter.setProperty ("value", 0.0f, nullptr);
+    }
     apvts.replaceState (state);
     Preset preset { state.getProperty ("presetName").toString(),
                     static_cast<float> (state.getProperty ("presetSmoosh")),
                     static_cast<float> (state.getProperty ("presetInput")),
-                    static_cast<float> (state.getProperty ("presetOutput")) };
+                    static_cast<float> (state.getProperty ("presetOutput")),
+                    static_cast<float> (state.getProperty ("presetLink", 0.0f)),
+                    static_cast<float> (state.getProperty ("presetHPF", 0.0f)) };
     if (! state.hasProperty ("presetSmoosh") || ! state.hasProperty ("presetInput")
         || ! state.hasProperty ("presetOutput") || ! validPreset (preset))
         preset = inferPreset();
@@ -280,7 +318,14 @@ bool SmoosherAudioProcessor::validPreset (const Preset& p)
     return p.name.isNotEmpty() && p.name.length() <= 64
         && std::isfinite (p.smoosh) && p.smoosh >= 0 && p.smoosh <= 100
         && std::isfinite (p.inputDB) && p.inputDB >= 0 && p.inputDB <= 30
-        && std::isfinite (p.outputDB) && p.outputDB >= -12 && p.outputDB <= 12;
+        && std::isfinite (p.outputDB) && p.outputDB >= -12 && p.outputDB <= 12
+        && validShape (p.stereoLink, p.detectorHPF);
+}
+
+bool SmoosherAudioProcessor::validShape (float link, float cutoff)
+{
+    return std::isfinite (link) && link >= 0 && link <= 100
+        && std::isfinite (cutoff) && cutoff >= 0 && cutoff <= 300 && (cutoff <= 0 || cutoff >= 20);
 }
 
 void SmoosherAudioProcessor::loadPreset (const Preset& preset)
@@ -298,6 +343,8 @@ void SmoosherAudioProcessor::loadPreset (const Preset& preset)
     setParameter ("smoosh", preset.smoosh);
     setParameter ("inputGain", preset.inputDB);
     setParameter ("outputGain", preset.outputDB);
+    setParameter ("stereoLink", preset.stereoLink);
+    setParameter ("detectorHPF", preset.detectorHPF);
     const juce::ScopedLock lock (presetLock);
     currentPreset = preset;
     endUserEdit();
@@ -315,7 +362,9 @@ bool SmoosherAudioProcessor::isPresetModified() const
     const auto c = controls();
     return std::abs (p.smoosh - c.smoosh) > 0.051f
         || std::abs (p.inputDB - c.inputDB) > 0.051f
-        || std::abs (p.outputDB - c.outputDB) > 0.051f;
+        || std::abs (p.outputDB - c.outputDB) > 0.051f
+        || std::abs (p.stereoLink - c.stereoLink) > 0.051f
+        || std::abs (p.detectorHPF - c.detectorHPF) > 0.51f;
 }
 
 SmoosherAudioProcessor::Preset SmoosherAudioProcessor::inferPreset() const
@@ -324,9 +373,11 @@ SmoosherAudioProcessor::Preset SmoosherAudioProcessor::inferPreset() const
     for (const auto& p : factoryPresets())
         if (std::abs (p.smoosh - c.smoosh) < 0.051f
             && std::abs (p.inputDB - c.inputDB) < 0.051f
-            && std::abs (p.outputDB - c.outputDB) < 0.051f)
+            && std::abs (p.outputDB - c.outputDB) < 0.051f
+            && std::abs (p.stereoLink - c.stereoLink) < 0.051f
+            && std::abs (p.detectorHPF - c.detectorHPF) < 0.51f)
             return p;
-    return { "Custom", c.smoosh, c.inputDB, c.outputDB };
+    return { "Custom", c.smoosh, c.inputDB, c.outputDB, c.stereoLink, c.detectorHPF };
 }
 
 juce::File SmoosherAudioProcessor::userPresetDirectory()
@@ -341,7 +392,7 @@ juce::File SmoosherAudioProcessor::userPresetDirectory()
 juce::Result SmoosherAudioProcessor::saveUserPreset (const juce::File& file, const juce::String& name)
 {
     const auto c = controls();
-    Preset preset { name.trim(), c.smoosh, c.inputDB, c.outputDB };
+    Preset preset { name.trim(), c.smoosh, c.inputDB, c.outputDB, c.stereoLink, c.detectorHPF };
     if (! validPreset (preset))
         return juce::Result::fail ("Enter a preset name of 1 to 64 characters.");
     if (file.exists())
@@ -350,11 +401,13 @@ juce::Result SmoosherAudioProcessor::saveUserPreset (const juce::File& file, con
     if (result.failed())
         return result;
     juce::XmlElement xml ("SmoosherPreset");
-    xml.setAttribute ("version", 1);
+    xml.setAttribute ("version", 2);
     xml.setAttribute ("name", preset.name);
     xml.setAttribute ("smoosh", preset.smoosh);
     xml.setAttribute ("input", preset.inputDB);
     xml.setAttribute ("output", preset.outputDB);
+    xml.setAttribute ("stereoLink", preset.stereoLink);
+    xml.setAttribute ("detectorHPF", preset.detectorHPF);
     juce::TemporaryFile temporary (file);
     if (! xml.writeTo (temporary.getFile()) || ! temporary.overwriteTargetFileWithTemporary())
         return juce::Result::fail ("The preset could not be saved to this folder.");
@@ -368,13 +421,21 @@ juce::Result SmoosherAudioProcessor::saveUserPreset (const juce::File& file, con
 juce::Result SmoosherAudioProcessor::loadUserPreset (const juce::File& file)
 {
     const auto xml = juce::XmlDocument::parse (file);
-    if (xml == nullptr || ! xml->hasTagName ("SmoosherPreset") || xml->getIntAttribute ("version") != 1
+    if (xml == nullptr || ! xml->hasTagName ("SmoosherPreset")
+        || (xml->getIntAttribute ("version") != 1 && xml->getIntAttribute ("version") != 2)
         || ! xml->hasAttribute ("smoosh") || ! xml->hasAttribute ("input") || ! xml->hasAttribute ("output"))
         return juce::Result::fail ("This file is not a supported Smoosher preset.");
     Preset preset { xml->getStringAttribute ("name"),
                     static_cast<float> (xml->getDoubleAttribute ("smoosh")),
                     static_cast<float> (xml->getDoubleAttribute ("input")),
                     static_cast<float> (xml->getDoubleAttribute ("output")) };
+    if (xml->getIntAttribute ("version") == 2)
+    {
+        if (! xml->hasAttribute ("stereoLink") || ! xml->hasAttribute ("detectorHPF"))
+            return juce::Result::fail ("This preset is missing its shaping controls.");
+        preset.stereoLink = static_cast<float> (xml->getDoubleAttribute ("stereoLink"));
+        preset.detectorHPF = static_cast<float> (xml->getDoubleAttribute ("detectorHPF"));
+    }
     if (! validPreset (preset))
         return juce::Result::fail ("This preset contains invalid parameter values.");
     loadPreset (preset);

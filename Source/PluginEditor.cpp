@@ -29,6 +29,9 @@ SmoosherLookAndFeel::SmoosherLookAndFeel()
     setColour (juce::TextButton::textColourOffId, text);
     setColour (juce::TextButton::buttonOnColourId, green);
     setColour (juce::TextButton::textColourOnId, background);
+    setColour (juce::ToggleButton::textColourId, text);
+    setColour (juce::ToggleButton::tickColourId, green);
+    setColour (juce::ToggleButton::tickDisabledColourId, muted);
     setColour (juce::Label::textColourId, text);
     setColour (juce::AlertWindow::backgroundColourId, panel);
     setColour (juce::AlertWindow::textColourId, text);
@@ -134,13 +137,26 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     mixLabel.setColour (juce::Label::textColourId, muted);
     addAndMakeVisible (mixLabel);
 
+    linkSlider.setName ("Couples Therapy - Stereo Link");
+    detectorSlider.setName ("Kick Privilege - Detector Bass Filter");
+    for (auto* slider : { &linkSlider, &detectorSlider })
+    {
+        slider->setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+        slider->setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
+        slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 88, 24);
+        addChildComponent (slider);
+    }
+    linkSlider.setTooltip ("Couples Therapy: 0% is independent stereo; 100% applies the stronger gain reduction to both channels. Mono is unchanged.");
+    detectorSlider.setTooltip ("Kick Privilege: Off or 20-300 Hz. Reduces bass in the detector, not the audio path. Double-click for Off.");
     auto& state = audioProcessor.getAPVTS();
     using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     smooshAttachment = std::make_unique<Attachment> (state, "smoosh", smooshSlider);
     inputGainAttachment = std::make_unique<Attachment> (state, "inputGain", inputGainSlider);
     outputGainAttachment = std::make_unique<Attachment> (state, "outputGain", outputGainSlider);
     mixAttachment = std::make_unique<Attachment> (state, "mix", mixSlider);
-    for (auto* slider : { &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider })
+    linkAttachment = std::make_unique<Attachment> (state, "stereoLink", linkSlider);
+    detectorAttachment = std::make_unique<Attachment> (state, "detectorHPF", detectorSlider);
+    for (auto* slider : { &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider, &linkSlider, &detectorSlider })
     {
         slider->onDragStart = [this, slider]
         {
@@ -170,7 +186,7 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     };
     addAndMakeVisible (presetComboBox);
     saveButton.onClick = [this] { savePreset(); };
-    saveButton.setTooltip ("Save Input, Smoosh, and Output as a user preset. Mix remains independent.");
+    saveButton.setTooltip ("Save Input, Smoosh, Output, and the Shape controls. Mix remains independent.");
     addAndMakeVisible (saveButton);
     modifiedLabel.setText ("MODIFIED", juce::dontSendNotification);
     modifiedLabel.setFont (juce::FontOptions (10.0f, juce::Font::bold));
@@ -186,23 +202,24 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     };
     addAndMakeVisible (clipButton);
     addAndMakeVisible (moreButton);
-    moreButton.setTooltip ("A/B, Undo, and Ego Check. Bad decisions insurance, included free.");
+    moreButton.setTooltip ("Compare, Shape, and Chaos. More tools, same questionable judgment. Included free.");
     moreButton.onClick = [this]
     {
         audioProcessor.setMoreTroubleOpen (! audioProcessor.moreTroubleOpen());
         updateMoreTrouble();
     };
     for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton,
-                          &learnButton, &matchButton, &dryButton, &resetEgoButton })
+                          &learnButton, &matchButton, &dryButton, &resetEgoButton,
+                          &compareTab, &shapeTab, &chaosTab, &generateButton })
         addChildComponent (button);
-    aButton.setTooltip ("Recall A: all four controls, preset identity, and Ego Check.");
+    aButton.setTooltip ("Recall A: all six controls, preset identity, and Ego Check.");
     bButton.setTooltip ("Recall B. On first use, B starts as a copy of A.");
     copyButton.setTooltip ("Replace the other slot with this one. Undo can reverse the copy.");
     aButton.onClick = [this] { audioProcessor.selectSlot (0); updateMoreTrouble(); };
     bButton.onClick = [this] { audioProcessor.selectSlot (1); updateMoreTrouble(); };
-    copyButton.onClick = [this] { audioProcessor.copyToOtherSlot(); updateMoreTrouble(); };
-    undoButton.onClick = [this] { audioProcessor.undo(); updateMoreTrouble(); };
-    redoButton.onClick = [this] { audioProcessor.redo(); updateMoreTrouble(); };
+    copyButton.onClick = [this] { generatedSlot = -1; audioProcessor.copyToOtherSlot(); updateMoreTrouble(); };
+    undoButton.onClick = [this] { generatedSlot = -1; audioProcessor.undo(); updateMoreTrouble(); };
+    redoButton.onClick = [this] { generatedSlot = -1; audioProcessor.redo(); updateMoreTrouble(); };
     learnButton.setTooltip ("Play a representative passage. Learn four seconds of audible RMS, then freeze the level correction.");
     learnButton.onClick = [this]
     {
@@ -213,7 +230,7 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     matchButton.setTooltip ("Enable or bypass the learned correction, applied after Mix. Relearn after changing the sound.");
     matchButton.onClick = [this] { audioProcessor.enableEgo (! audioProcessor.egoSettings().enabled); updateMoreTrouble(); };
     dryButton.setTooltip ("Hold to hear the original input. Release to hear Smoosher again.");
-    dryButton.onStateChange = [this] { audioProcessor.auditionDry (dryButton.isDown() && drawerVisible); };
+    dryButton.onStateChange = [this] { audioProcessor.auditionDry (dryButton.isDown() && drawerVisible && visiblePage == 0); };
     resetEgoButton.setTooltip ("Clear this slot's learned correction. Undo can bring it back.");
     resetEgoButton.onClick = [this] { audioProcessor.resetEgo(); updateMoreTrouble(); };
     egoStatusLabel.setFont (juce::FontOptions (11.0f));
@@ -223,6 +240,33 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     egoGainLabel.setColour (juce::Label::textColourId, green);
     addChildComponent (egoStatusLabel);
     addChildComponent (egoGainLabel);
+    compareTab.onClick = [this] { audioProcessor.setMoreTroublePage (0); updateMoreTrouble(); };
+    shapeTab.onClick = [this] { audioProcessor.setMoreTroublePage (1); updateMoreTrouble(); };
+    chaosTab.onClick = [this] { audioProcessor.setMoreTroublePage (2); updateMoreTrouble(); };
+    chaosComboBox.setName ("Bad Decisions amount");
+    chaosComboBox.addItemList ({ "Gentle", "Questionable", "Unsupervised" }, 1);
+    chaosComboBox.setTooltip ("Gentle makes small moves, Questionable makes wider moves, and Unsupervised explores the full unlocked ranges.");
+    chaosComboBox.onChange = [this] { audioProcessor.setChaosAmount (chaosComboBox.getSelectedId() - 1); };
+    addChildComponent (chaosComboBox);
+    const std::array<juce::String, 6> names {{ "Smoosh", "Input", "Output", "Mix", "Link", "Bass" }};
+    for (size_t i = 0; i < lockButtons.size(); ++i)
+    {
+        auto& button = lockButtons[i];
+        button.setButtonText (names[i]);
+        button.setName ("Lock " + names[i]);
+        button.setTooltip ("Checked means locked: keep " + names[i] + " unchanged in the generated variation.");
+        button.onClick = [this, i] { audioProcessor.setChaosLocked (static_cast<int> (i), lockButtons[i].getToggleState()); };
+        addChildComponent (button);
+    }
+    generateButton.setTooltip ("Replace the inactive slot with a variation of this sound. The active sound stays put. Undo recovers the replaced slot.");
+    generateButton.onClick = [this]
+    {
+        if (audioProcessor.generateVariation()) generatedSlot = 1 - audioProcessor.activeSlot();
+        updateMoreTrouble();
+    };
+    chaosStatusLabel.setFont (juce::FontOptions (11.0f));
+    chaosStatusLabel.setColour (juce::Label::textColourId, muted);
+    addChildComponent (chaosStatusLabel);
     refreshPresetList();
     setSize (620, 470);
     updateMoreTrouble();
@@ -280,17 +324,42 @@ void SmoosherAudioProcessorEditor::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (10.0f));
     const auto ego = audioProcessor.egoSettings();
     const auto slot = audioProcessor.activeSlot() == 0 ? "A" : "B";
-    g.drawText (juce::String (slot) + (ego.enabled ? "  /  EGO ON" : ""), 204, 424, 170, 20, juce::Justification::centredLeft);
+    const auto shaped = linkSlider.getValue() > 0 || detectorSlider.getValue() >= 20;
+    g.drawText (juce::String (slot) + (ego.enabled ? " / EGO ON" : "") + (shaped ? " / SHAPE" : ""),
+                204, 424, 190, 20, juce::Justification::centredLeft);
     if (drawerVisible)
     {
         g.setColour (panel);
-        g.fillRoundedRectangle (24, 477, 572, 161, 8);
+        g.fillRoundedRectangle (24, 477, 572, 223, 8);
         g.setColour (muted);
         g.setFont (juce::FontOptions (10.0f, juce::Font::bold));
-        g.drawText ("A/B  /  BAD DECISIONS INSURANCE", 38, 486, 350, 16, juce::Justification::centredLeft);
-        g.drawText ("EGO CHECK  /  LOUDER ISN'T BETTER", 38, 549, 360, 16, juce::Justification::centredLeft);
+        g.drawText ("BAD DECISIONS INSURANCE", 367, 489, 215, 18, juce::Justification::centredRight);
+        g.drawText (juce::String ("EDITING ") + slot, 264, 526, 110, 18, juce::Justification::centredLeft);
+        if (visiblePage == 0)
+        {
+            g.drawText ("EGO CHECK  /  LOUDER ISN'T BETTER", 38, 570, 400, 18, juce::Justification::centredLeft);
+            g.drawText ("FOUR SECONDS OF HONESTY. THEN IT STAYS PUT.", 38, 676, 544, 16, juce::Justification::centredLeft);
+        }
+        else if (visiblePage == 1)
+        {
+            g.drawText ("COUPLES THERAPY", 38, 570, 250, 18, juce::Justification::centredLeft);
+            g.drawText ("KICK PRIVILEGE", 330, 570, 252, 18, juce::Justification::centredLeft);
+            g.setFont (juce::FontOptions (11.0f));
+            g.drawText ("Stereo link", 38, 593, 250, 18, juce::Justification::centredLeft);
+            g.drawText ("Detector bass filter", 330, 593, 252, 18, juce::Justification::centredLeft);
+            g.drawText ("Independent at 0%. Together at 100%.", 38, 676, 270, 16, juce::Justification::centredLeft);
+            g.drawText ("Less kick in the detector. Same bass path.", 330, 676, 252, 16, juce::Justification::centredLeft);
+        }
+        else
+        {
+            g.drawText ("BAD DECISIONS", 38, 574, 190, 18, juce::Justification::centredLeft);
+            g.drawText ("LOCKED CONTROLS", 38, 630, 270, 16, juce::Justification::centredLeft);
+            g.setFont (juce::FontOptions (11.0f));
+            g.drawText ("Output and Mix start locked. Select the other slot to audition; relearn Ego Check.",
+                        38, 676, 544, 16, juce::Justification::centredLeft);
+        }
         g.setColour (juce::Colour (0xff35403e));
-        g.drawHorizontalLine (541, 38, 582);
+        g.drawHorizontalLine (558, 38, 582);
     }
 }
 
@@ -309,17 +378,27 @@ void SmoosherAudioProcessorEditor::resized()
     mixSlider.setBounds (440, 402, 156, 64);
     clipButton.setBounds (545, 337, 40, 18);
     moreButton.setBounds (24, 420, 164, 28);
-    aButton.setBounds (38, 507, 42, 26);
-    bButton.setBounds (88, 507, 42, 26);
-    copyButton.setBounds (140, 507, 112, 26);
-    undoButton.setBounds (394, 507, 90, 26);
-    redoButton.setBounds (492, 507, 90, 26);
-    learnButton.setBounds (38, 572, 86, 28);
-    matchButton.setBounds (132, 572, 96, 28);
-    dryButton.setBounds (236, 572, 112, 28);
-    resetEgoButton.setBounds (356, 572, 66, 28);
-    egoGainLabel.setBounds (430, 572, 152, 28);
-    egoStatusLabel.setBounds (33, 607, 554, 22);
+    compareTab.setBounds (38, 486, 100, 26);
+    shapeTab.setBounds (146, 486, 100, 26);
+    chaosTab.setBounds (254, 486, 100, 26);
+    aButton.setBounds (38, 524, 42, 26);
+    bButton.setBounds (88, 524, 42, 26);
+    copyButton.setBounds (140, 524, 112, 26);
+    undoButton.setBounds (394, 524, 90, 26);
+    redoButton.setBounds (492, 524, 90, 26);
+    learnButton.setBounds (38, 601, 86, 28);
+    matchButton.setBounds (132, 601, 96, 28);
+    dryButton.setBounds (236, 601, 112, 28);
+    resetEgoButton.setBounds (356, 601, 66, 28);
+    egoGainLabel.setBounds (430, 601, 152, 28);
+    egoStatusLabel.setBounds (33, 638, 554, 22);
+    linkSlider.setBounds (38, 610, 250, 64);
+    detectorSlider.setBounds (330, 610, 252, 64);
+    chaosComboBox.setBounds (240, 569, 168, 28);
+    generateButton.setBounds (420, 569, 162, 28);
+    chaosStatusLabel.setBounds (33, 601, 554, 22);
+    for (size_t i = 0; i < lockButtons.size(); ++i)
+        lockButtons[i].setBounds (38 + static_cast<int> (i) * 91, 649, 89, 24);
 }
 
 void SmoosherAudioProcessorEditor::drawMeters (juce::Graphics& g)
@@ -400,21 +479,46 @@ void SmoosherAudioProcessorEditor::updateMoreTrouble()
 {
     audioProcessor.synchroniseHistory();
     const auto open = audioProcessor.moreTroubleOpen();
-    if (open != drawerVisible)
+    const auto page = audioProcessor.moreTroublePage();
+    if (open != drawerVisible || page != visiblePage)
     {
         drawerVisible = open;
-        for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton,
-                              &learnButton, &matchButton, &dryButton, &resetEgoButton })
+        visiblePage = page;
+        for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton, &compareTab, &shapeTab, &chaosTab })
             button->setVisible (open);
-        egoStatusLabel.setVisible (open);
-        egoGainLabel.setVisible (open);
-        setSize (620, open ? 654 : 470);
+        for (auto* button : { &learnButton, &matchButton, &dryButton, &resetEgoButton })
+            button->setVisible (open && page == 0);
+        egoStatusLabel.setVisible (open && page == 0);
+        egoGainLabel.setVisible (open && page == 0);
+        linkSlider.setVisible (open && page == 1);
+        detectorSlider.setVisible (open && page == 1);
+        chaosComboBox.setVisible (open && page == 2);
+        generateButton.setVisible (open && page == 2);
+        chaosStatusLabel.setVisible (open && page == 2);
+        for (auto& button : lockButtons) button.setVisible (open && page == 2);
+        setSize (620, open ? 716 : 470);
         moreButton.setButtonText (open ? "Less Trouble -" : "More Trouble +");
+        repaint();
     }
+    compareTab.setToggleState (page == 0, juce::dontSendNotification);
+    shapeTab.setToggleState (page == 1, juce::dontSendNotification);
+    chaosTab.setToggleState (page == 2, juce::dontSendNotification);
+    linkSlider.setEnabled (audioProcessor.getTotalNumOutputChannels() > 1);
     const auto slot = audioProcessor.activeSlot();
     aButton.setToggleState (slot == 0, juce::dontSendNotification);
     bButton.setToggleState (slot == 1, juce::dontSendNotification);
     copyButton.setButtonText (slot == 0 ? "Copy A > B" : "Copy B > A");
+    generateButton.setButtonText (slot == 0 ? "Generate > B" : "Generate > A");
+    generateButton.setEnabled (audioProcessor.canGenerateVariation());
+    chaosComboBox.setSelectedId (audioProcessor.chaosAmount() + 1, juce::dontSendNotification);
+    for (size_t i = 0; i < lockButtons.size(); ++i)
+        lockButtons[i].setToggleState (audioProcessor.chaosLocked (static_cast<int> (i)), juce::dontSendNotification);
+    juce::String chaosMessage = "Generate into the other slot. Your current sound stays put.";
+    if (! audioProcessor.canGenerateVariation()) chaosMessage = "Everything is locked. Unlock a control to invite trouble.";
+    else if (generatedSlot >= 0)
+        chaosMessage = generatedSlot == slot ? "Auditioning the generated slot. Undo can take you back."
+                                            : juce::String (generatedSlot == 0 ? "A" : "B") + " is ready. Select it above to audition. Undo recovers the replaced slot.";
+    chaosStatusLabel.setText (chaosMessage, juce::dontSendNotification);
     undoButton.setEnabled (audioProcessor.canUndo());
     redoButton.setEnabled (audioProcessor.canRedo());
     undoButton.setTooltip ("Undo: " + audioProcessor.undoName());
@@ -477,7 +581,7 @@ void SmoosherAudioProcessorEditor::updatePresetDisplay()
 
 void SmoosherAudioProcessorEditor::savePreset()
 {
-    auto* dialog = new juce::AlertWindow ("Save user preset", "Save Input, Smoosh, and Output. Mix stays independent.", juce::MessageBoxIconType::NoIcon);
+    auto* dialog = new juce::AlertWindow ("Save user preset", "Save Input, Smoosh, Output, and Shape controls. Mix stays independent.", juce::MessageBoxIconType::NoIcon);
     auto name = audioProcessor.getCurrentPreset().name;
     for (const auto& preset : SmoosherAudioProcessor::factoryPresets())
         if (preset.name == name)

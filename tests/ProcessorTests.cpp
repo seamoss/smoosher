@@ -171,6 +171,7 @@ void testUnicodePresetRecall()
 }
 
 #include "MoreTroubleTests.h"
+#include "ShapeChaosTests.h"
 
 int main()
 {
@@ -180,6 +181,7 @@ int main()
         testPassthroughAndMeters(); testSmoothingAndStereo(); testReductionAndRates();
         testPresetRecall(); testUserPresets(); testUnicodePresetRecall();
         testMoreTrouble();
+        testShapeChaos();
         std::cout << "All processor, metering, automation, and preset checks passed.\n";
         return 0;
     }

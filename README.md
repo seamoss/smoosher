@@ -2,13 +2,13 @@
 
 A free audio compressor plugin with character, by Helvete Sound, LLC. One Smoosh knob combines compression, saturation, and frequency-sensitive detection.
 
-Version **1.2.0** adds A/B snapshots, grouped Undo/Redo, and **Ego Check** RMS level matching in the collapsible **More Trouble** drawer. All features are free. The compact main interface, compression curves, and plugin/parameter identifiers are retained; older sessions load with Ego Check off.
+Version **1.3.0 — Professional Help** adds **Couples Therapy** stereo linking, **Kick Privilege** detector bass filtering, and **Bad Decisions** variations inside **More Trouble**. Compare retains A/B, Undo/Redo, and Ego Check; Shape and Chaos contain the new tools. All features are free. Older sessions keep their sound with Stereo Link at 0% and the detector filter Off.
 
-**[Download the 1.2.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.2.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.2.0/Smoosher-1.2.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.2.0/Smoosher-1.2.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.2.0/SHA256SUMS.txt).
+**[Download the 1.3.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.3.0/Smoosher-1.3.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.3.0/Smoosher-1.3.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.3.0/SHA256SUMS.txt).
 
-<img src="docs/images/smoosher-1.2.0.png" alt="Smoosher 1.2.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
+<img src="docs/images/smoosher-1.3.0.png" alt="Smoosher 1.3.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
 
-See the [quick start and meter guide](docs/USAGE.md) for the main controls and the [More Trouble guide](docs/MORE-TROUBLE.md) for A/B, Undo, and Ego Check. Screenshots are rendered from the 1.2.0 editor with an example test signal; meter readings depend on your audio.
+See the [quick start and meter guide](docs/USAGE.md), [More Trouble guide](docs/MORE-TROUBLE.md), and [1.3 release notes](docs/releases/1.3.0.md). Current screenshots are rendered from the actual 1.3.0 editor; meter readings depend on your audio.
 
 ## Controls
 
@@ -17,7 +17,11 @@ See the [quick start and meter guide](docs/USAGE.md) for the main controls and t
 - **Output, −12 to +12 dB:** trims the wet output after compression and soft clipping. This is not a final output ceiling; positive gain can produce peaks above 0 dBFS.
 - **Mix, 0–100%:** blends the original dry input with the processed wet signal. Preset changes leave Mix alone.
 
-The compact interface is 620 × 470 pixels, with a small Mix knob below the meters. **More Trouble +** expands it to 620 × 654 for A/B, Undo/Redo, and Ego Check. Each A/B slot includes all four controls, preset identity, and its learned match settings; both slots save with the session. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final output after dry/wet blending and any Ego Check correction with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
+The compact interface is 620 × 470 pixels, with a small Mix knob below the meters. **More Trouble +** expands it to 620 × 716 with Compare, Shape, and Chaos tabs. A/B, Copy, Undo, and Redo stay available on every tab. Each A/B slot includes all six controls, preset identity, and its learned match settings; both slots save with the session. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final output after dry/wet blending and any Ego Check correction with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
+
+- **Couples Therapy, 0–100%:** links stereo gain reduction. At 100%, both channels receive the stronger reduction; at 0%, they remain independent. Mono is unaffected.
+- **Kick Privilege, Off or 20–300 Hz:** reduces bass in the compression detector, leaving the audible bass path intact.
+- **Bad Decisions:** generates Gentle, Questionable, or Unsupervised variations into the inactive A/B slot. Output and Mix start locked; all six controls have locks. Your active sound stays put, and Undo recovers the replaced slot.
 
 Sixteen factory presets plus Init are included. The original seven:
 
@@ -47,19 +51,19 @@ The 1.1 collection adds nine more starting points, from yacht rock to questionab
 
 Adjust Input for the source level and Output to level-match. These presets use the same processing as every other setting; their names describe starting points, not additional effects. Mix stays where you left it, so blend the heavier settings to taste.
 
-Preset names and their original settings are saved with the session. An asterisk and MODIFIED label indicate edits to Input, Smoosh, or Output; changing Mix does not modify a preset. Older sessions without preset metadata infer a matching factory name or display Custom.
+Preset names and their original settings are saved with the session. An asterisk and MODIFIED label indicate edits to Input, Smoosh, Output, or either Shape control; changing Mix does not modify a preset. Older sessions without preset metadata infer a matching factory name or display Custom. Factory presets keep their original settings and reset Shape to its legacy defaults.
 
-Use **Save...** to store a named user preset. User presets preserve Input, Smoosh, and Output, and leave Mix unchanged. They are saved in `~/Library/Application Support/Helvete Sound/Smoosher/Presets/` on macOS or `%APPDATA%/Helvete Sound/Smoosher/Presets/` on Windows. Existing preset files are not overwritten. Dani Time now stores +30 dB explicitly, matching the supported input range.
+Use **Save...** to store a named user preset. User presets preserve Input, Smoosh, Output, and Shape, and leave Mix unchanged. They are saved in `~/Library/Application Support/Helvete Sound/Smoosher/Presets/` on macOS or `%APPDATA%/Helvete Sound/Smoosher/Presets/` on Windows. Existing preset files are not overwritten. Version 1 preset files still load with Shape off; new version 2 files require Smoosher 1.3 or later. Dani Time stores +30 dB explicitly, matching the supported input range.
 
 ## Installation
 
-The [1.2.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.2.0) is available now with the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Older 1.0.0 downloads use the original ZIP/manual installation process.
+The [1.3.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.0) includes the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Previous releases remain available, including [1.2.0](https://github.com/seamoss/smoosher/releases/tag/v1.2.0). Older 1.0.0 downloads use the original ZIP/manual installation process.
 
 ### macOS
 
 The release build targets **macOS 11 or later**, with both **Apple Silicon and Intel** code in each plugin. Hosted CI validates on macOS 15; the minimum OS target is not a claim that every OS/DAW combination has been tested.
 
-1. Close your DAW and download `Smoosher-1.2.0-macOS-universal.pkg` from the published release.
+1. Close your DAW and download `Smoosher-1.3.0-macOS-universal.pkg` from the published release.
 2. Open the signed, notarized installer and follow the prompts. Administrator authorization is required because it installs for all users:
    - AU: `/Library/Audio/Plug-Ins/Components/Smoosher.component`
    - VST3: `/Library/Audio/Plug-Ins/VST3/Smoosher.vst3`
@@ -70,7 +74,7 @@ The installer contains AU and VST3. The standalone app is available when buildin
 
 ### Windows
 
-1. Close your DAW and download `Smoosher-1.2.0-Windows.zip` from the published release.
+1. Close your DAW and download `Smoosher-1.3.0-Windows.zip` from the published release.
 2. Extract it and copy the entire `VST3/Smoosher.vst3` bundle into `C:\Program Files\Common Files\VST3\`. Administrator authorization may be required.
 3. Open your DAW and rescan plugins if necessary.
 
@@ -138,7 +142,7 @@ Builds do not install plugins automatically. Developers can opt in with `-DSMOOS
 
 Pull requests and main/master pushes build macOS AU/VST3 and Windows VST3 without release credentials. CI checks both Mac architectures, bundle versions, and AU validation. Version tags additionally sign and notarize the installer, verify it with Gatekeeper, and create a draft GitHub release after all jobs pass. See [RELEASING.md](docs/RELEASING.md) for setup and the release checklist.
 
-To run processor regression checks (unity/dry routing, meter and clip behavior, smoothing across block sizes, sample rates, session recall, and user presets):
+To run processor regression checks (legacy audio compatibility, Shape, randomization locks/ranges, A/B, Undo, Ego Check, routing, meters, smoothing, session recall, and user presets):
 
 ```sh
 cmake -S . -B build -DSMOOSHER_BUILD_TESTS=ON
@@ -165,9 +169,9 @@ Run release-script tests with `python3 -m unittest discover -s tests -v`. They c
 - `.github/workflows/build.yml`: CI and draft releases.
 - `scripts/`: version checking, universal-binary verification, packaging, and notarization.
 
-The wet signal path is input gain → tanh saturation → low-pass filtering → compression with frequency-sensitive detection → makeup gain → Hammer soft clipping → output gain. The result is blended with the original dry input. Channels have independent compressor envelopes.
+The wet signal path is input gain → tanh saturation → low-pass filtering → compression with frequency-sensitive detection → makeup gain → Hammer soft clipping → output gain. The result is blended with the original dry input, then Ego Check applies its optional frozen correction. Channels retain independent detector envelopes; Couples Therapy blends their gain reductions toward the stronger one. Kick Privilege filters only the detector.
 
-Keep the existing bundle ID, manufacturer/plugin codes, and parameter IDs stable so DAWs can identify the plugin in existing sessions. The 1.1 update preserves the steady-state compression curves; parameter transitions are intentionally smoothed. Stereo linking and oversampling are not included.
+Keep the existing bundle ID, manufacturer/plugin codes, and parameter IDs stable so DAWs can identify the plugin in existing sessions. The two Shape parameters are appended after the original four. With Shape at its legacy defaults, regression tests verify bit-for-bit output against the 1.2 DSP. Older sessions explicitly restore those defaults and retain their saved A/B and Ego Check settings. Oversampling is not included.
 
 ## License
 

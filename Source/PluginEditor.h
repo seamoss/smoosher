@@ -26,6 +26,7 @@ private:
     SmoosherAudioProcessor& audioProcessor;
     SmoosherLookAndFeel lookAndFeel;
     juce::Slider smooshSlider, inputGainSlider, outputGainSlider, mixSlider;
+    juce::Slider linkSlider, detectorSlider;
     juce::Label smooshLabel, inputGainLabel, outputGainLabel, mixLabel, modifiedLabel;
     juce::ComboBox presetComboBox;
     juce::TextButton saveButton { "Save..." }, clipButton { "PEAK" };
@@ -33,7 +34,13 @@ private:
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" }, learnButton { "Learn" };
     juce::TextButton matchButton { "Match off" }, dryButton { "Hold for Dry" }, resetEgoButton { "Reset" };
     juce::Label egoStatusLabel, egoGainLabel;
+    juce::TextButton compareTab { "Compare" }, shapeTab { "Shape" }, chaosTab { "Chaos" };
+    juce::TextButton generateButton { "Generate > B" };
+    juce::ComboBox chaosComboBox;
+    std::array<juce::ToggleButton, 6> lockButtons;
+    juce::Label chaosStatusLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> smooshAttachment, inputGainAttachment, outputGainAttachment, mixAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linkAttachment, detectorAttachment;
     juce::Array<juce::File> userPresets;
     juce::TooltipWindow tooltips { this, 600 };
     float displayedLeft = 0, displayedRight = 0, displayedReduction = 0;
@@ -42,6 +49,7 @@ private:
     bool clipVisible = false;
     bool drawerVisible = false;
     int activeGestures = 0;
+    int visiblePage = -1, generatedSlot = -1;
 
     void timerCallback() override;
     void refreshPresetList();

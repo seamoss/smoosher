@@ -54,6 +54,7 @@ public:
     {
         juce::String name;
         float smoosh = 0, inputDB = 0, outputDB = 0;
+        float stereoLink = 0, detectorHPF = 0;
     };
     static const std::array<Preset, 17>& factoryPresets();
     void loadPreset (const Preset&);
@@ -88,6 +89,15 @@ public:
     void auditionDry (bool dry) { ego.auditionDry (dry); }
     bool moreTroubleOpen() const { return drawerOpen.load(); }
     void setMoreTroubleOpen (bool open) { drawerOpen.store (open); if (! open) auditionDry (false); }
+    int moreTroublePage() const { return drawerPage.load(); }
+    void setMoreTroublePage (int page);
+    int chaosAmount() const { return variationAmount.load(); }
+    void setChaosAmount (int amount);
+    // Lock order: Smoosh, Input, Output, Mix, Stereo Link, Detector HPF.
+    bool chaosLocked (int index) const;
+    void setChaosLocked (int index, bool locked);
+    bool canGenerateVariation() const { return variationLocks.load() != 63; }
+    bool generateVariation();
 
 private:
     //==============================================================================
@@ -101,12 +111,15 @@ private:
     std::atomic<float>* inputParameter = nullptr;
     std::atomic<float>* outputParameter = nullptr;
     std::atomic<float>* mixParameter = nullptr;
+    std::atomic<float>* linkParameter = nullptr;
+    std::atomic<float>* detectorParameter = nullptr;
     std::atomic<float> meterLeft { 0 }, meterRight { 0 }, meterReduction { 0 };
     std::atomic<bool> outputClipped { false };
     mutable juce::CriticalSection presetLock;
     Preset currentPreset { "Init", 0, 0, 0 };
     Preset inferPreset() const;
     static bool validPreset (const Preset&);
+    static bool validShape (float link, float cutoff);
 
     struct Snapshot
     {
@@ -130,6 +143,8 @@ private:
     std::atomic<uint64_t> externalEdits { 0 };
     uint64_t editExternalRevision = 0;
     std::atomic<bool> drawerOpen { false };
+    std::atomic<int> drawerPage { 0 }, variationAmount { 0 }, variationLocks { 12 };
+    juce::Random variationRandom;
     void parameterChanged (const juce::String&, float) override;
     void timerCallback() override { synchroniseHistory(); }
     Workspace captureWorkspace() const;
