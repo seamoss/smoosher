@@ -127,6 +127,7 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     mixSlider.setTooltip ("Blend the dry input with the wet signal. Presets leave Mix unchanged. Double-click for 100% wet.");
     addAndMakeVisible (mixSlider);
     mixLabel.setText ("MIX", juce::dontSendNotification);
+    mixLabel.setJustificationType (juce::Justification::centredRight);
     mixLabel.setFont (juce::FontOptions (11.0f, juce::Font::bold));
     mixLabel.setColour (juce::Label::textColourId, muted);
     addAndMakeVisible (mixLabel);
@@ -236,7 +237,7 @@ void SmoosherAudioProcessorEditor::resized()
     smooshSlider.setBounds (218, 135, 184, 162);
     outputGainLabel.setBounds (442, 123, 144, 20);
     outputGainSlider.setBounds (442, 145, 144, 152);
-    mixLabel.setBounds (396, 422, 40, 24);
+    mixLabel.setBounds (414, 422, 44, 24);
     mixSlider.setBounds (440, 402, 156, 64);
     clipButton.setBounds (545, 337, 40, 18);
 }
