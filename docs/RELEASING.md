@@ -4,9 +4,11 @@ Version 1.3.1 adds the one-knob Destroy view while preserving Normal settings an
 
 See the [1.3.1 release notes](releases/1.3.1.md) for current release status and verification.
 
-## 1.3.1 tester release
+## Published 1.3.1 tester release
 
-The 1.3.1 release is being prepared from the reviewed source changes. Local validation passed; CI and final artifact verification are pending. The published release notes will record the final results.
+[Smoosher 1.3.1 — Destroy](https://github.com/seamoss/smoosher/releases/tag/v1.3.1) was published as a tester prerelease from commit `3b1fbbfad4f5ac16768ab777378c1feca6c7d48b`. [Main CI](https://github.com/seamoss/smoosher/actions/runs/43128981159) and [release CI](https://github.com/seamoss/smoosher/actions/runs/43128982311) passed Mac/Windows builds, processor/editor regressions, release-script tests, and AU validation. The tag run signed and notarized the universal installer, stapled its ticket, and created the release assets.
+
+Downloaded assets passed SHA-256 checks. The Mac installer passed Developer ID signatures, stapled-ticket validation, Gatekeeper assessment, embedded bundle signatures, architecture/version/identifier checks, macOS 11 metadata, and system install-path checks. Apple reported Accepted with no issues. Its signed VST3 passed pluginval strictness 5 with GUI tests skipped. The Windows ZIP passed CRC, x64 PE, 1.3.1 manifest, and bundled Destroy guide/screenshot checks, and retains the shipped 1.2 VST3 class identifiers. Broader DAW playback, clean-machine installation, and older-OS testing remain tester work. See the [release notes](releases/1.3.1.md).
 
 ## Previous 1.3.0 tester release
 
