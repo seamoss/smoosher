@@ -1,9 +1,10 @@
 #include "PluginProcessor.h"
 
-void SmoosherAudioProcessor::parameterChanged (const juce::String&, float)
+void SmoosherAudioProcessor::parameterChanged (const juce::String& id, float value)
 {
     // No locks, strings, or history allocations on the host's parameter thread.
     ego.invalidate();
+    if (id == "destroyMode" && value >= 0.5f) ego.auditionDry (false);
     if (localEditThread.load() != juce::Thread::getCurrentThreadId()) ++externalEdits;
 }
 
@@ -12,6 +13,8 @@ SmoosherAudioProcessor::Workspace SmoosherAudioProcessor::captureWorkspace() con
     const juce::ScopedLock lock (presetLock);
     auto result = workspace;
     result.slots[static_cast<size_t> (result.active)] = { controls(), currentPreset, ego.settings() };
+    result.destroy = destroyAmount();
+    result.destroyMode = destroyMode();
     return result;
 }
 
@@ -19,6 +22,7 @@ bool SmoosherAudioProcessor::equal (const Workspace& a, const Workspace& b)
 {
     if (a.active != b.active || a.valid != b.valid) return false;
     const auto close = [] (float x, float y) { return std::abs (x - y) < 0.0001f; };
+    if (a.destroyMode != b.destroyMode || ! close (a.destroy, b.destroy)) return false;
     for (size_t i = 0; i < a.slots.size(); ++i)
     {
         if (! a.valid[i]) continue;
@@ -119,6 +123,8 @@ void SmoosherAudioProcessor::applyWorkspace (const Workspace& next)
     set ("mix", snapshot.controls.mix);
     set ("stereoLink", snapshot.controls.stereoLink);
     set ("detectorHPF", snapshot.controls.detectorHPF);
+    set ("destroy", next.destroy);
+    set ("destroyMode", next.destroyMode ? 1.0f : 0.0f);
     workspace = next;
     currentPreset = snapshot.preset;
     ego.setSettings (snapshot.ego);
@@ -216,7 +222,7 @@ void SmoosherAudioProcessor::learnEgo()
 {
     const juce::ScopedLock lock (presetLock);
     synchroniseHistory();
-    if (editDepth != 0 || ego.isLearning()) return;
+    if (editDepth != 0 || ego.isLearning() || destroyMode()) return;
     learnBefore = captureWorkspace();
     pendingLearn = ego.learn();
     knownConfiguration = ego.word();
@@ -347,6 +353,18 @@ void SmoosherAudioProcessor::readMoreTrouble (const juce::ValueTree& state)
     // APVTS and the original preset metadata remain authoritative for the active slot.
     workspace.slots[static_cast<size_t> (workspace.active)] = { controls(), currentPreset, ego.settings() };
     knownConfiguration = ego.word();
+}
+
+void SmoosherAudioProcessor::setDestroyMode (bool enabled)
+{
+    if (enabled == destroyMode()) return;
+    beginUserEdit (enabled ? "Enter Destroy" : "Return to Normal");
+    auto* parameter = apvts.getParameter ("destroyMode");
+    parameter->beginChangeGesture();
+    parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+    parameter->endChangeGesture();
+    endUserEdit();
+    updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
 }
 
 void SmoosherAudioProcessor::setMoreTroublePage (int page)

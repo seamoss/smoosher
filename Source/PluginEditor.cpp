@@ -96,7 +96,8 @@ void SmoosherLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int
     const auto radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
     const auto centre = bounds.getCentre();
     const auto angle = startAngle + position * (endAngle - startAngle);
-    const auto colour = slider.getName() == "Smoosh" ? green.interpolatedWith (red, position * 0.9f) : green;
+    const auto isDestroy = slider.getName() == "Destroy";
+    const auto colour = slider.getName() == "Smoosh" || isDestroy ? green.interpolatedWith (red, position * 0.9f) : green;
     juce::Path track, fill;
     track.addCentredArc (centre.x, centre.y, radius, radius, 0, startAngle, endAngle, true);
     fill.addCentredArc (centre.x, centre.y, radius, radius, 0, startAngle, angle, true);
@@ -110,12 +111,22 @@ void SmoosherLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int
     g.fillEllipse (face);
     g.setColour (juce::Colour (0xff4c5852));
     g.drawEllipse (face, 1.0f);
-    const juce::Point<float> tip (centre.x + std::sin (angle) * radius * 0.66f,
-                                 centre.y - std::cos (angle) * radius * 0.66f);
-    const juce::Point<float> base (centre.x + std::sin (angle) * radius * 0.38f,
-                                  centre.y - std::cos (angle) * radius * 0.38f);
+    const auto tipRadius = radius * (isDestroy ? 0.74f : 0.66f);
+    const auto baseRadius = radius * (isDestroy ? 0.58f : 0.38f);
+    const juce::Point<float> tip (centre.x + std::sin (angle) * tipRadius,
+                                 centre.y - std::cos (angle) * tipRadius);
+    const juce::Point<float> base (centre.x + std::sin (angle) * baseRadius,
+                                  centre.y - std::cos (angle) * baseRadius);
     g.setColour (text);
     g.drawLine ({ base, tip }, 3.0f);
+    if (isDestroy)
+    {
+        g.setColour (colour);
+        g.setFont (juce::FontOptions (28.0f, juce::Font::bold));
+        g.drawText (juce::String (slider.getValue(), 1) + "%",
+                    face.withHeight (40).withCentre ({ centre.x, centre.y + 12.0f }),
+                    juce::Justification::centred);
+    }
 }
 
 SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcessor& processor)
@@ -156,7 +167,16 @@ SmoosherAudioProcessorEditor::SmoosherAudioProcessorEditor (SmoosherAudioProcess
     mixAttachment = std::make_unique<Attachment> (state, "mix", mixSlider);
     linkAttachment = std::make_unique<Attachment> (state, "stereoLink", linkSlider);
     detectorAttachment = std::make_unique<Attachment> (state, "detectorHPF", detectorSlider);
-    for (auto* slider : { &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider, &linkSlider, &detectorSlider })
+    destroySlider.setName ("Destroy");
+    destroySlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    destroySlider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
+    destroySlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    destroySlider.setTooltip ("One knob. Calculated damage. Drag or scroll; double-click for clean. Normal settings stay saved.");
+    addChildComponent (destroySlider);
+    destroyAttachment = std::make_unique<Attachment> (state, "destroy", destroySlider);
+    addAndMakeVisible (modeButton);
+    modeButton.onClick = [this] { audioProcessor.setDestroyMode (! audioProcessor.destroyMode()); updateMoreTrouble(); };
+    for (auto* slider : { &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider, &linkSlider, &detectorSlider, &destroySlider })
     {
         slider->onDragStart = [this, slider]
         {
@@ -302,6 +322,19 @@ void SmoosherAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::La
 void SmoosherAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (background);
+    if (destroyVisible)
+    {
+        g.setColour (muted);
+        g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        g.drawText ("SMOOSHER", 24, 22, 180, 24, juce::Justification::centredLeft);
+        g.setColour (green.interpolatedWith (red, static_cast<float> (destroySlider.getValue()) * 0.009f));
+        g.setFont (juce::FontOptions (28.0f, juce::Font::bold));
+        g.drawText ("DESTROY", 24, 80, 372, 38, juce::Justification::centred);
+        g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        g.drawText (DestroyCurve::description (static_cast<float> (destroySlider.getValue())),
+                    24, 414, 372, 24, juce::Justification::centred);
+        return;
+    }
     g.setColour (green);
     g.setFont (juce::FontOptions (25.0f, juce::Font::bold));
     g.drawText ("SMOOSHER", 24, 15, 240, 32, juce::Justification::centredLeft);
@@ -365,6 +398,8 @@ void SmoosherAudioProcessorEditor::paint (juce::Graphics& g)
 
 void SmoosherAudioProcessorEditor::resized()
 {
+    modeButton.setBounds (destroyVisible ? 268 : 392, 22, 128, 24);
+    destroySlider.setBounds (55, 125, 310, 280);
     presetComboBox.setBounds (24, 77, 310, 28);
     saveButton.setBounds (344, 77, 76, 28);
     modifiedLabel.setBounds (430, 77, 110, 28);
@@ -478,12 +513,22 @@ void SmoosherAudioProcessorEditor::timerCallback()
 void SmoosherAudioProcessorEditor::updateMoreTrouble()
 {
     audioProcessor.synchroniseHistory();
-    const auto open = audioProcessor.moreTroubleOpen();
+    const auto destroy = audioProcessor.destroyMode();
+    const auto open = audioProcessor.moreTroubleOpen() && ! destroy;
     const auto page = audioProcessor.moreTroublePage();
-    if (open != drawerVisible || page != visiblePage)
+    if (open != drawerVisible || page != visiblePage || destroy != destroyVisible)
     {
         drawerVisible = open;
+        destroyVisible = destroy;
         visiblePage = page;
+        for (auto* component : std::initializer_list<juce::Component*> {
+                &inputGainSlider, &smooshSlider, &outputGainSlider, &mixSlider,
+                &inputGainLabel, &smooshLabel, &outputGainLabel, &mixLabel,
+                &presetComboBox, &saveButton, &clipButton, &moreButton })
+            component->setVisible (! destroy);
+        destroySlider.setVisible (destroy);
+        modeButton.setButtonText (destroy ? "Normal view" : "Destroy");
+        modeButton.setTooltip (destroy ? "Return to your saved Normal sound." : "One-knob Destroy mode. Your Normal sound stays saved.");
         for (auto* button : { &aButton, &bButton, &copyButton, &undoButton, &redoButton, &compareTab, &shapeTab, &chaosTab })
             button->setVisible (open);
         for (auto* button : { &learnButton, &matchButton, &dryButton, &resetEgoButton })
@@ -496,7 +541,7 @@ void SmoosherAudioProcessorEditor::updateMoreTrouble()
         generateButton.setVisible (open && page == 2);
         chaosStatusLabel.setVisible (open && page == 2);
         for (auto& button : lockButtons) button.setVisible (open && page == 2);
-        setSize (620, open ? 716 : 470);
+        setSize (destroy ? 420 : 620, open ? 716 : 470);
         moreButton.setButtonText (open ? "Less Trouble -" : "More Trouble +");
         repaint();
     }
@@ -576,7 +621,7 @@ void SmoosherAudioProcessorEditor::updatePresetDisplay()
     const auto name = preset.name + (modified ? " *" : "");
     if (presetComboBox.getText() != name)
         presetComboBox.setText (name, juce::dontSendNotification);
-    modifiedLabel.setVisible (modified);
+    modifiedLabel.setVisible (modified && ! destroyVisible);
 }
 
 void SmoosherAudioProcessorEditor::savePreset()

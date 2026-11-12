@@ -119,7 +119,7 @@ void testShapeRecallAndPresets()
 {
     SmoosherAudioProcessor p;
     const std::array<juce::String, 4> originalNames {{ "Smoosh", "Input", "Output", "Mix" }};
-    expect (p.getParameters().size() == 6, "Two automatable shape parameters must be appended");
+    expect (p.getParameters().size() == 8, "Shape and Destroy parameters must follow the original parameters");
     for (int i = 0; i < 4; ++i) expect (p.getParameters()[i]->getName (32) == originalNames[static_cast<size_t> (i)], "Original parameter order must remain stable");
     p.loadPreset ({ "Shape A", 48, 6, -4, 75, 90 });
     p.selectSlot (1);

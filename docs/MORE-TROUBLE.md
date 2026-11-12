@@ -1,12 +1,12 @@
 # Smoosher 1.3 — More Trouble
 
-**Smoosher 1.3.0** adds Couples Therapy, Kick Privilege, and Bad Decisions to the collapsible More Trouble drawer, alongside A/B, Undo/Redo, and Ego Check. All features remain free. See the [tester release](https://github.com/seamoss/smoosher/releases/tag/v1.3.0) for downloads and the [quick start](USAGE.md) for the main controls.
+**Smoosher's Normal view** includes Couples Therapy, Kick Privilege, and Bad Decisions in the collapsible More Trouble drawer, alongside A/B, Undo/Redo, and Ego Check. All features remain free. See the [tester release](https://github.com/seamoss/smoosher/releases/tag/v1.3.1) for downloads and the [quick start](USAGE.md) for the main controls.
 
 **More Trouble +** opens **Compare**, **Shape**, and **Chaos** beneath the main interface; **Less Trouble −** closes the drawer. The main view remains 620 × 470 pixels, expanding to 620 × 716. A/B, Copy, Undo, and Redo remain available on every tab. Each session remembers whether the drawer was open and which tab was selected.
 
 <img src="images/smoosher-1.3.0-compare.png" alt="Smoosher 1.3 Compare tab with A/B, Undo/Redo, and Ego Check" width="620">
 
-The screenshots are rendered from the actual 1.3 editor. Meter readings and the learned correction depend on your audio.
+The drawer screenshots are from the 1.3.0 editor and show the same More Trouble tools in 1.3.1. See the [Destroy guide](DESTROY.md) for the new one-knob view and header navigation. Meter readings and the learned correction depend on your audio.
 
 <details>
 <summary>Compact view</summary>
@@ -22,15 +22,15 @@ The screenshots are rendered from the actual 1.3 editor. Meter readings and the 
 
 Each slot keeps Input, Smoosh, Output, **Mix**, **Stereo Link**, **Detector Bass Filter**, the preset name and original preset settings, plus its learned Ego Check correction and on/off state. The selected slot is indicated beside the drawer button even when the drawer is closed. Both slots and the selection save with the DAW session.
 
-Switches use the existing control smoothing. Copying and switching are undoable. A/B does not capture compressor envelope history or rewind playback, so compare similar passages. Host automation controls all six parameters; A/B does not override subsequent automation.
+Switches use the existing control smoothing. Copying and switching are undoable. A/B does not capture compressor envelope history or rewind playback, so compare similar passages. Host automation controls all six Normal parameters; A/B does not override subsequent automation.
 
 ## Undo: mistakes are a creative process
 
-**Undo** and **Redo** work across knob drags, typed values, wheel adjustments, double-click resets, preset loads, A/B switches and copies, Ego Check changes, and Bad Decisions generation. A whole knob drag, preset load, or generation is one step. Hover either button to see the next action.
+**Undo** and **Redo** work across knob drags, typed values, wheel adjustments, double-click resets, preset loads, A/B switches and copies, Ego Check changes, Bad Decisions generation, and Destroy gestures/mode changes. A whole knob drag, preset load, or generation is one step. Hover either button to see the next action.
 
 The last 64 local edits are kept while the plugin instance is open, including when its editor is closed. Loading a session starts with fresh history. A new edit clears Redo. Host automation is excluded from local history and invalidates older local edits so Undo cannot restore stale settings over a newer automation pass.
 
-Undoing a saved preset's name does **not** delete its file. User preset files contain Input, Smoosh, Output, and both Shape controls; Mix, A/B, and Ego Check are session settings.
+Undoing a saved preset's name does **not** delete its file. User preset files contain Input, Smoosh, Output, and both Shape controls; Mix, A/B, Ego Check, and Destroy are session settings. Destroy is separate from Normal's A/B slots. Undoing a return to Normal reopens Destroy.
 
 ## Ego Check: is it good, or just loud?
 
@@ -84,6 +84,6 @@ Factory presets retain their original settings and reset Shape to 0%/Off. User p
 
 The processor regression suite covers bit-for-bit comparison against the 1.2 DSP in mono/stereo at 44.1/48/96 kHz, stereo linking, detector-only filtering, smoothing across block sizes, legacy session and preset migration, variation ranges and locks, and recovery of overwritten slots. It also retains grouped Undo/Redo, preset identity, A/B recall, concurrent automation, RMS learning, cancellation, frozen correction, dry audition, and meter checks.
 
-Local validation on November 11, 2026 passed the processor suite, all five release-script tests, universal bundle/version checks, AU validation on Apple Silicon and Intel, and VST3 pluginval strictness 5 with GUI tests skipped. Separate editor checks verified Shape gestures, Undo/Redo, and history persistence through timer updates. Release-specific validation status is recorded in the [1.3 release notes](releases/1.3.0.md).
+Local validation on November 11, 2026 passed the processor suite, all five release-script tests, universal bundle/version checks, AU validation on Apple Silicon and Intel, and VST3 pluginval strictness 5 with GUI tests skipped. Separate editor checks verified Shape gestures, Undo/Redo, and history persistence through timer updates. Release-specific validation status is recorded in the [1.3.1 release notes](releases/1.3.1.md).
 
 When testing this prerelease, exercise both AU and VST3 in your DAW: automate Shape, generate and audition variations, switch A/B during playback, undo typed values and drags, learn on a bus, reopen the editor, and save/reload old and new sessions. Check the normal and expanded window sizes in the host. Report issues with your OS, DAW/version, plugin format, sample rate, buffer size, and reproduction steps.

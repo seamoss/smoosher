@@ -2,13 +2,13 @@
 
 A free audio compressor plugin with character, by Helvete Sound, LLC. One Smoosh knob combines compression, saturation, and frequency-sensitive detection.
 
-Version **1.3.0 — Professional Help** adds **Couples Therapy** stereo linking, **Kick Privilege** detector bass filtering, and **Bad Decisions** variations inside **More Trouble**. Compare retains A/B, Undo/Redo, and Ego Check; Shape and Chaos contain the new tools. All features are free. Older sessions keep their sound with Stereo Link at 0% and the detector filter Off.
+Version **1.3.1 — Destroy** adds a separate one-knob view with pre-calculated damage, from clean to **Total Loss**. Click **Normal view** to return to your saved sound. Normal retains A/B, Undo, Ego Check, Couples Therapy, Kick Privilege, and Bad Decisions inside **More Trouble**. All features are free. Older sessions keep their sound and load with Destroy off.
 
-**[Download the 1.3.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.0)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.3.0/Smoosher-1.3.0-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.3.0/Smoosher-1.3.0-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.3.0/SHA256SUMS.txt).
+**[Download the 1.3.1 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.1)** — [signed and notarized Mac installer](https://github.com/seamoss/smoosher/releases/download/v1.3.1/Smoosher-1.3.1-macOS-universal.pkg), [Windows VST3](https://github.com/seamoss/smoosher/releases/download/v1.3.1/Smoosher-1.3.1-Windows.zip), and [checksums](https://github.com/seamoss/smoosher/releases/download/v1.3.1/SHA256SUMS.txt).
 
-<img src="docs/images/smoosher-1.3.0.png" alt="Smoosher 1.3.0 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
+<img src="docs/images/smoosher-1.3.1-normal.png" alt="Smoosher 1.3.1 with the Drum Bus preset, rounded value boxes, gain-reduction and stereo output meters, and the small Mix knob" width="620">
 
-See the [quick start and meter guide](docs/USAGE.md), [More Trouble guide](docs/MORE-TROUBLE.md), and [1.3 release notes](docs/releases/1.3.0.md). Current screenshots are rendered from the actual 1.3.0 editor; meter readings depend on your audio.
+See the [quick start and meter guide](docs/USAGE.md), [More Trouble guide](docs/MORE-TROUBLE.md), [Destroy guide](docs/DESTROY.md), and [1.3.1 release notes](docs/releases/1.3.1.md). Current screenshots are rendered from the actual 1.3.1 editor; meter readings depend on your audio.
 
 ## Controls
 
@@ -17,11 +17,15 @@ See the [quick start and meter guide](docs/USAGE.md), [More Trouble guide](docs/
 - **Output, −12 to +12 dB:** trims the wet output after compression and soft clipping. This is not a final output ceiling; positive gain can produce peaks above 0 dBFS.
 - **Mix, 0–100%:** blends the original dry input with the processed wet signal. Preset changes leave Mix alone.
 
-The compact interface is 620 × 470 pixels, with a small Mix knob below the meters. **More Trouble +** expands it to 620 × 716 with Compare, Shape, and Chaos tabs. A/B, Copy, Undo, and Redo stay available on every tab. Each A/B slot includes all six controls, preset identity, and its learned match settings; both slots save with the session. Each control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final output after dry/wet blending and any Ego Check correction with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
+The compact interface is 620 × 470 pixels, with a small Mix knob below the meters. **More Trouble +** expands it to 620 × 716 with Compare, Shape, and Chaos tabs. A/B, Copy, Undo, and Redo stay available on every tab. Each A/B slot includes all six controls, preset identity, and its learned match settings; both slots save with the session. Each Normal control supports typed values, mouse-wheel adjustment, and double-click reset. Control changes ramp over 20 ms. Compression gain reduction is shown in dB; stereo output meters show the final output after dry/wet blending and any Ego Check correction with a 1.5-second peak hold. The CLIP indicator latches when either channel reaches 0 dBFS; click it to clear.
 
 - **Couples Therapy, 0–100%:** links stereo gain reduction. At 100%, both channels receive the stronger reduction; at 0%, they remain independent. Mono is unaffected.
 - **Kick Privilege, Off or 20–300 Hz:** reduces bass in the compression detector, leaving the audible bass path intact.
 - **Bad Decisions:** generates Gentle, Questionable, or Unsupervised variations into the inactive A/B slot. Output and Mix start locked; all six controls have locks. Your active sound stays put, and Undo recovers the replaced slot.
+
+**Destroy** in the header opens a 420 × 470 view with one large knob and a return button. Its repeatable curve coordinates drive, compression/Hammer, parallel blend, and fixed output compensation. Double-click for clean; return to Normal to recover its controls, preset, A/B slots, and Ego Check. The amount and mode are automatable, undoable, and saved with the session. See the [Destroy guide](docs/DESTROY.md).
+
+<img src="docs/images/smoosher-1.3.1-destroy.png" alt="Destroy at 75 percent: Insurance Fraud" width="420">
 
 Sixteen factory presets plus Init are included. The original seven:
 
@@ -57,13 +61,13 @@ Use **Save...** to store a named user preset. User presets preserve Input, Smoos
 
 ## Installation
 
-The [1.3.0 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.0) includes the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Previous releases remain available, including [1.2.0](https://github.com/seamoss/smoosher/releases/tag/v1.2.0). Older 1.0.0 downloads use the original ZIP/manual installation process.
+The [1.3.1 tester prerelease](https://github.com/seamoss/smoosher/releases/tag/v1.3.1) includes the assets below. It is marked as a prerelease while testers check wider DAW and OS compatibility. Previous releases remain available, including [1.3.0](https://github.com/seamoss/smoosher/releases/tag/v1.3.0). Older 1.0.0 downloads use the original ZIP/manual installation process.
 
 ### macOS
 
 The release build targets **macOS 11 or later**, with both **Apple Silicon and Intel** code in each plugin. Hosted CI validates on macOS 15; the minimum OS target is not a claim that every OS/DAW combination has been tested.
 
-1. Close your DAW and download `Smoosher-1.3.0-macOS-universal.pkg` from the published release.
+1. Close your DAW and download `Smoosher-1.3.1-macOS-universal.pkg` from the published release.
 2. Open the signed, notarized installer and follow the prompts. Administrator authorization is required because it installs for all users:
    - AU: `/Library/Audio/Plug-Ins/Components/Smoosher.component`
    - VST3: `/Library/Audio/Plug-Ins/VST3/Smoosher.vst3`
@@ -74,7 +78,7 @@ The installer contains AU and VST3. The standalone app is available when buildin
 
 ### Windows
 
-1. Close your DAW and download `Smoosher-1.3.0-Windows.zip` from the published release.
+1. Close your DAW and download `Smoosher-1.3.1-Windows.zip` from the published release.
 2. Extract it and copy the entire `VST3/Smoosher.vst3` bundle into `C:\Program Files\Common Files\VST3\`. Administrator authorization may be required.
 3. Open your DAW and rescan plugins if necessary.
 
@@ -164,14 +168,15 @@ Run release-script tests with `python3 -m unittest discover -s tests -v`. They c
 
 - `Source/PluginProcessor.cpp`: parameters, metering handoff, preset management, and state serialization.
 - `Source/SmoosherDSP.h`: compression, saturation, smoothing, and audio measurements.
-- `Source/PluginEditor.cpp`: controls, meters, and preset UI. Factory presets live in `SmoosherAudioProcessor::factoryPresets()`.
+- `Source/DestroyCurve.h`: fixed Destroy macro curve.
+- `Source/PluginEditor.cpp`: Normal/Destroy views, controls, meters, and preset UI. Factory presets live in `SmoosherAudioProcessor::factoryPresets()`.
 - `CMakeLists.txt`: version, stable plugin identifiers, formats, and JUCE dependency.
 - `.github/workflows/build.yml`: CI and draft releases.
 - `scripts/`: version checking, universal-binary verification, packaging, and notarization.
 
 The wet signal path is input gain → tanh saturation → low-pass filtering → compression with frequency-sensitive detection → makeup gain → Hammer soft clipping → output gain. The result is blended with the original dry input, then Ego Check applies its optional frozen correction. Channels retain independent detector envelopes; Couples Therapy blends their gain reductions toward the stronger one. Kick Privilege filters only the detector.
 
-Keep the existing bundle ID, manufacturer/plugin codes, and parameter IDs stable so DAWs can identify the plugin in existing sessions. The two Shape parameters are appended after the original four. With Shape at its legacy defaults, regression tests verify bit-for-bit output against the 1.2 DSP. Older sessions explicitly restore those defaults and retain their saved A/B and Ego Check settings. Oversampling is not included.
+Keep the existing bundle ID, manufacturer/plugin codes, and parameter IDs stable so DAWs can identify the plugin in existing sessions. The two Shape parameters follow the original four; Destroy amount and mode follow those. The existing IDs and ordering are unchanged. With Shape at its legacy defaults, regression tests verify bit-for-bit output against the 1.2 DSP. Older sessions explicitly restore those defaults and retain their saved A/B and Ego Check settings. Pre-1.3.1 sessions reset Destroy off. Normal audio is tested bit for bit before and after using Destroy. Destroy uses a separate processing path, while Normal stays warm for the 20 ms return crossfade; it adds CPU use but no latency. Oversampling is not included.
 
 ## License
 

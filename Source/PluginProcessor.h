@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "SmoosherDSP.h"
+#include "DestroyCurve.h"
 
 //==============================================================================
 class SmoosherAudioProcessor  : public juce::AudioProcessor,
@@ -98,6 +99,9 @@ public:
     void setChaosLocked (int index, bool locked);
     bool canGenerateVariation() const { return variationLocks.load() != 63; }
     bool generateVariation();
+    bool destroyMode() const { return destroyModeParameter->load() >= 0.5f; }
+    float destroyAmount() const { return destroyParameter->load(); }
+    void setDestroyMode (bool);
 
 private:
     //==============================================================================
@@ -105,14 +109,20 @@ private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     SmoosherDSP dsp;
+    SmoosherDSP destroyDSP;
+    juce::AudioBuffer<float> destroyBuffer;
+    juce::SmoothedValue<float> destroyBlend;
     EgoCheck ego;
     SmoosherDSP::Controls controls() const;
+    SmoosherDSP::MeterReadings processModes (juce::AudioBuffer<float>&);
     std::atomic<float>* smooshParameter = nullptr;
     std::atomic<float>* inputParameter = nullptr;
     std::atomic<float>* outputParameter = nullptr;
     std::atomic<float>* mixParameter = nullptr;
     std::atomic<float>* linkParameter = nullptr;
     std::atomic<float>* detectorParameter = nullptr;
+    std::atomic<float>* destroyParameter = nullptr;
+    std::atomic<float>* destroyModeParameter = nullptr;
     std::atomic<float> meterLeft { 0 }, meterRight { 0 }, meterReduction { 0 };
     std::atomic<bool> outputClipped { false };
     mutable juce::CriticalSection presetLock;
@@ -132,6 +142,8 @@ private:
         std::array<Snapshot, 2> slots;
         std::array<bool, 2> valid {{ true, false }};
         int active = 0;
+        float destroy = 0;
+        bool destroyMode = false;
     };
     struct Edit { Workspace before, after; juce::String name; };
     Workspace workspace, editBefore, learnBefore;

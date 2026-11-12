@@ -27,6 +27,8 @@ private:
     SmoosherLookAndFeel lookAndFeel;
     juce::Slider smooshSlider, inputGainSlider, outputGainSlider, mixSlider;
     juce::Slider linkSlider, detectorSlider;
+    juce::Slider destroySlider;
+    juce::TextButton modeButton { "Destroy" };
     juce::Label smooshLabel, inputGainLabel, outputGainLabel, mixLabel, modifiedLabel;
     juce::ComboBox presetComboBox;
     juce::TextButton saveButton { "Save..." }, clipButton { "PEAK" };
@@ -41,6 +43,7 @@ private:
     juce::Label chaosStatusLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> smooshAttachment, inputGainAttachment, outputGainAttachment, mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linkAttachment, detectorAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> destroyAttachment;
     juce::Array<juce::File> userPresets;
     juce::TooltipWindow tooltips { this, 600 };
     float displayedLeft = 0, displayedRight = 0, displayedReduction = 0;
@@ -48,6 +51,7 @@ private:
     double peakHoldUntil = 0, lastMeterTime = 0;
     bool clipVisible = false;
     bool drawerVisible = false;
+    bool destroyVisible = false;
     int activeGestures = 0;
     int visiblePage = -1, generatedSlot = -1;
 

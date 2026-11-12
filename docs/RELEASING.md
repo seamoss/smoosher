@@ -1,10 +1,14 @@
 # Releasing Smoosher
 
-Version 1.3.0 adds Couples Therapy, Kick Privilege, and Bad Decisions inside More Trouble. Keep JUCE at 8.0.4 and preserve plugin/parameter identifiers. Changed binaries must be signed and notarized again before distribution.
+Version 1.3.1 adds the one-knob Destroy view while preserving Normal settings and older-session audio. Keep JUCE at 8.0.4 and preserve plugin/parameter identifiers. Changed binaries must be signed and notarized again before distribution.
 
-See the [1.3.0 release notes](releases/1.3.0.md) for current release status and verification.
+See the [1.3.1 release notes](releases/1.3.1.md) for current release status and verification.
 
-## Published 1.3.0 tester release
+## 1.3.1 tester release
+
+The 1.3.1 release is being prepared from the reviewed source changes. Local validation passed; CI and final artifact verification are pending. The published release notes will record the final results.
+
+## Previous 1.3.0 tester release
 
 [Smoosher 1.3.0 — Professional Help](https://github.com/seamoss/smoosher/releases/tag/v1.3.0) was published as a tester prerelease from commit `e099d837f78e65af935eaae9764472f181641b7e`. [Main CI](https://github.com/seamoss/smoosher/actions/runs/43123484927) and [release CI](https://github.com/seamoss/smoosher/actions/runs/43124441343) passed Mac/Windows builds, processor regressions, release-script tests, and AU validation. The tag run signed and notarized the universal installer, stapled its ticket, and created the release assets.
 
@@ -26,8 +30,8 @@ The `macos-release` environment is configured with the five secrets and three va
 
 ## Release outputs
 
-- `Smoosher-1.3.0-macOS-universal.pkg`: Developer ID signed AU/VST3 installer, notarized by Apple with the ticket stapled. Installs to `/Library/Audio/Plug-Ins/` for all users. Targets macOS 11+ on arm64 and x86_64.
-- `Smoosher-1.3.0-Windows.zip`: unsigned x64 VST3 bundle, README, guides, and screenshots.
+- `Smoosher-1.3.1-macOS-universal.pkg`: Developer ID signed AU/VST3 installer, notarized by Apple with the ticket stapled. Installs to `/Library/Audio/Plug-Ins/` for all users. Targets macOS 11+ on arm64 and x86_64.
+- `Smoosher-1.3.1-Windows.zip`: unsigned x64 VST3 bundle, README, guides, and screenshots.
 - `SHA256SUMS.txt`: SHA-256 hashes of the final installer and ZIP, generated after stapling.
 
 The workflow creates a **draft** GitHub release. It never publishes automatically or overwrites assets on an already-published release. Main/master, pull requests, and manual branch runs build without signing credentials. The unsigned Mac ZIP is an Actions artifact only.
@@ -53,7 +57,7 @@ If both Developer ID identities are already installed with their private keys, l
 export MACOS_APPLICATION_IDENTITY='Developer ID Application: Your Name (TEAMID)'
 export MACOS_INSTALLER_IDENTITY='Developer ID Installer: Your Name (TEAMID)'
 export MACOS_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
-bash scripts/package-macos.sh build/Smoosher_artefacts/Release dist/Smoosher-1.3.0-macOS-universal.pkg
+bash scripts/package-macos.sh build/Smoosher_artefacts/Release dist/Smoosher-1.3.1-macOS-universal.pkg
 ```
 
 Signing keys and notarization credentials are separate. Save the latter with this interactive command; it prompts for your Apple Account, app-specific password, and Team ID without requiring them in shell history:
@@ -65,7 +69,7 @@ xcrun notarytool store-credentials smoosher-notary --keychain "$MACOS_KEYCHAIN"
 Then submit, require acceptance, staple, and verify the same installer with:
 
 ```sh
-bash scripts/notarize-macos.sh dist/Smoosher-1.3.0-macOS-universal.pkg smoosher-notary
+bash scripts/notarize-macos.sh dist/Smoosher-1.3.1-macOS-universal.pkg smoosher-notary
 ```
 
 This uses the same notarization script as CI. A successfully signed installer is **not yet notarized** until this step passes. Hosted GitHub runners still need the exports and environment setup below because they cannot access your Mac's keychain.
@@ -113,8 +117,8 @@ The three `gh secret set` commands without input pipes prompt for their values. 
 2. Set up the environment above before pushing the release tag. For this release:
 
    ```sh
-   git tag -a v1.3.0 -m 'Smoosher 1.3.0'
-   git push origin v1.3.0
+   git tag -a v1.3.1 -m 'Smoosher 1.3.1'
+   git push origin v1.3.1
    ```
 
    Run these from the reviewed release commit. The workflow rejects a tag that differs from the CMake version.
@@ -127,17 +131,17 @@ The three `gh secret set` commands without input pipes prompt for their values. 
 To rerun against an existing tag, use Actions → Build and release Smoosher → Run workflow and select that tag, or:
 
 ```sh
-gh workflow run build.yml --ref v1.3.0
+gh workflow run build.yml --ref v1.3.1
 ```
 
 ## Before publishing
 
 - Verify the downloaded files against `SHA256SUMS.txt` (`shasum -a 256 -c SHA256SUMS.txt` on macOS, with both files present).
-- Check `pkgutil --check-signature Smoosher-1.3.0-macOS-universal.pkg`, `xcrun stapler validate Smoosher-1.3.0-macOS-universal.pkg`, and `spctl --assess --type install --verbose=2 Smoosher-1.3.0-macOS-universal.pkg`.
+- Check `pkgutil --check-signature Smoosher-1.3.1-macOS-universal.pkg`, `xcrun stapler validate Smoosher-1.3.1-macOS-universal.pkg`, and `spctl --assess --type install --verbose=2 Smoosher-1.3.1-macOS-universal.pkg`.
 - Test the downloaded installer on a separate Mac or clean user/test system, including offline ticket validation. Confirm AU/VST3 land in the documented system directories and upgrading replaces those copies without relocating them.
 - Verify the installed bundles with `codesign --verify --deep --strict /Library/Audio/Plug-Ins/Components/Smoosher.component` and the equivalent VST3 path. Run `auval -v aufx Smsh Smsh`.
 - Load AU and VST3 in actual DAWs on Apple Silicon and Intel (or an Intel DAW under Rosetta as an additional check), and test Windows VST3. Test older supported macOS versions before claiming them as verified.
-- Recall sessions saved with 1.0.x, 1.1.0, or 1.2.0 and compare settled audio. Confirm preset/modified labels, independent Mix, automation, meter/clip behavior, A/B recall, grouped Undo, and Ego Check learning/cancellation. Sessions before 1.2 must load with Ego Check off; 1.2 sessions must retain their A/B and Ego Check settings. Sessions before 1.3 must load with Stereo Link at 0% and the detector filter Off. Check Shape automation and Bad Decisions locks, inactive-slot generation, and Undo. Run the processor regression tests with `SMOOSHER_BUILD_TESTS=ON`.
+- Recall sessions saved with 1.0.x, 1.1.0, or 1.2.0 and compare settled audio. Confirm preset/modified labels, independent Mix, automation, meter/clip behavior, A/B recall, grouped Undo, and Ego Check learning/cancellation. Sessions before 1.2 must load with Ego Check off; 1.2 sessions must retain their A/B and Ego Check settings. Sessions before 1.3 must load with Stereo Link at 0% and the detector filter Off. Check Shape automation and Bad Decisions locks, inactive-slot generation, and Undo. Pre-1.3.1 sessions must reset Destroy off. Check Destroy automation/recall, clean zero, mode transitions, Undo, and returning to the saved Normal sound. Run the processor regression tests with `SMOOSHER_BUILD_TESTS=ON`.
 - Run [pluginval](https://github.com/Tracktion/pluginval) at strictness 5 or higher against the built plugins for additional compatibility coverage. This is a manual release check, not currently a bundled CI dependency.
 - Check the notary log artifact for warnings even when Apple accepts the submission, and review the generated release notes.
 

@@ -21,7 +21,9 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
     mixParameter = apvts.getRawParameterValue ("mix");
     linkParameter = apvts.getRawParameterValue ("stereoLink");
     detectorParameter = apvts.getRawParameterValue ("detectorHPF");
-    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF" })
+    destroyParameter = apvts.getRawParameterValue ("destroy");
+    destroyModeParameter = apvts.getRawParameterValue ("destroyMode");
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF", "destroy", "destroyMode" })
         apvts.addParameterListener (id, this);
     startTimerHz (10);
 }
@@ -29,7 +31,7 @@ SmoosherAudioProcessor::SmoosherAudioProcessor()
 SmoosherAudioProcessor::~SmoosherAudioProcessor()
 {
     stopTimer();
-    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF" })
+    for (const auto* id : { "smoosh", "inputGain", "outputGain", "mix", "stereoLink", "detectorHPF", "destroy", "destroyMode" })
         apvts.removeParameterListener (id, this);
 }
 
@@ -96,6 +98,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoosherAudioProcessor::crea
         juce::ParameterID { "detectorHPF", 2 }, "Kick Privilege", cutoffRange, 0, juce::String(),
         juce::AudioProcessorParameter::genericParameter,
         [] (float value, int) { return value < 20.0f ? juce::String ("Off") : juce::String (value, 0) + " Hz"; }));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "destroy", 3 }, "Destroy",
+        juce::NormalisableRange<float> (0, 100, 0.1f), 0, juce::String(),
+        juce::AudioProcessorParameter::genericParameter,
+        [] (float value, int) { return juce::String (value, 1) + "%"; }));
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "destroyMode", 3 }, "Destroy Mode", false));
     return layout;
 }
 
@@ -163,8 +172,11 @@ void SmoosherAudioProcessor::changeProgramName (int index, const juce::String& n
 //==============================================================================
 void SmoosherAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused (samplesPerBlock);
     dsp.prepare (sampleRate, controls());
+    destroyDSP.prepare (sampleRate, DestroyCurve::settings (destroyAmount()));
+    destroyBuffer.setSize (2, juce::jmax (1, samplesPerBlock));
+    destroyBlend.reset (sampleRate, 0.02);
+    destroyBlend.setCurrentAndTargetValue (destroyMode() ? 1.0f : 0.0f);
     ego.prepare (sampleRate);
     meterLeft.store (0); meterRight.store (0); meterReduction.store (0);
     outputClipped.store (false);
@@ -207,7 +219,7 @@ void SmoosherAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     juce::ignoreUnused (midiMessages);
     for (int channel = getTotalNumInputChannels(); channel < getTotalNumOutputChannels(); ++channel)
         buffer.clear (channel, 0, buffer.getNumSamples());
-    const auto meters = dsp.process (buffer, controls(), &ego);
+    const auto meters = processModes (buffer);
     auto accumulate = [] (std::atomic<float>& destination, float value)
     {
         auto previous = destination.load (std::memory_order_relaxed);
@@ -218,6 +230,55 @@ void SmoosherAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     accumulate (meterReduction, meters.reductionDB);
     if (meters.clipped)
         outputClipped.store (true, std::memory_order_relaxed);
+}
+
+SmoosherDSP::MeterReadings SmoosherAudioProcessor::processModes (juce::AudioBuffer<float>& buffer)
+{
+    destroyBlend.setTargetValue (destroyMode() ? 1.0f : 0.0f);
+    const auto normal = controls();
+    // Keep the Normal path exactly as shipped, with no extra copy or blend.
+    if (! destroyBlend.isSmoothing() && destroyBlend.getCurrentValue() <= 0.0f)
+        return dsp.process (buffer, normal, &ego);
+
+    const auto destroyed = DestroyCurve::settings (destroyAmount());
+    const auto channels = juce::jmin (2, buffer.getNumChannels());
+    SmoosherDSP::MeterReadings meters;
+    // Hosts may exceed their advertised block size. Chunk into prepared storage
+    // instead of allocating on the audio thread.
+    for (int offset = 0; offset < buffer.getNumSamples(); offset += destroyBuffer.getNumSamples())
+    {
+        const auto length = juce::jmin (destroyBuffer.getNumSamples(), buffer.getNumSamples() - offset);
+        for (int ch = 0; ch < channels; ++ch)
+            destroyBuffer.copyFrom (ch, 0, buffer, ch, offset, length);
+        juce::AudioBuffer<float> normalBlock (buffer.getArrayOfWritePointers(), channels, offset, length);
+        juce::AudioBuffer<float> destroyBlock (destroyBuffer.getArrayOfWritePointers(), channels, 0, length);
+        // Normal's envelopes and frozen Ego Check remain warm while inaudible.
+        const auto normalMeters = dsp.process (normalBlock, normal, &ego);
+        const auto destroyMeters = destroyDSP.process (destroyBlock, destroyed);
+        const auto startBlend = destroyBlend.getCurrentValue();
+        for (int i = 0; i < length; ++i)
+        {
+            const auto blend = destroyBlend.getNextValue();
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                const auto a = normalBlock.getSample (ch, i);
+                const auto b = destroyBlock.getSample (ch, i);
+                const auto output = blend >= 1.0f ? b : blend <= 0.0f ? a : a + (b - a) * blend;
+                normalBlock.setSample (ch, i, output);
+                auto& peak = ch == 0 ? meters.left : meters.right;
+                peak = juce::jmax (peak, std::abs (output));
+                meters.clipped = meters.clipped || std::abs (output) >= 1.0f;
+            }
+        }
+        const auto reductionAt = [&] (float blend)
+        {
+            return normalMeters.reductionDB + (destroyMeters.reductionDB - normalMeters.reductionDB) * blend;
+        };
+        meters.reductionDB = juce::jmax (meters.reductionDB,
+            juce::jmax (reductionAt (startBlend), reductionAt (destroyBlend.getCurrentValue())));
+    }
+    if (channels == 1) meters.right = meters.left;
+    return meters;
 }
 
 SmoosherDSP::MeterReadings SmoosherAudioProcessor::consumeMeters()
@@ -276,6 +337,20 @@ void SmoosherAudioProcessor::setStateInformation (const void* data, int sizeInBy
         const auto value = static_cast<float> (parameter.getProperty ("value"));
         if (! (juce::String (id) == "stereoLink" ? validShape (value, 0) : validShape (0, value)))
             parameter.setProperty ("value", 0.0f, nullptr);
+    }
+    for (const auto* id : { "destroy", "destroyMode" })
+    {
+        auto parameter = state.getChildWithProperty ("id", id);
+        if (! parameter.isValid())
+        {
+            parameter = juce::ValueTree ("PARAM");
+            parameter.setProperty ("id", id, nullptr);
+            state.appendChild (parameter, nullptr);
+        }
+        const auto value = static_cast<float> (parameter.getProperty ("value", 0.0f));
+        const auto isMode = juce::String (id) == "destroyMode";
+        const auto valid = std::isfinite (value) && value >= 0 && value <= (isMode ? 1.0f : 100.0f);
+        parameter.setProperty ("value", valid ? value : 0.0f, nullptr);
     }
     apvts.replaceState (state);
     Preset preset { state.getProperty ("presetName").toString(),
